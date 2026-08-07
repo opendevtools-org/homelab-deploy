@@ -75,7 +75,8 @@ Write-Host ("Updating  : {0}" -f $upstream)
 Set-Location $upstream
 Invoke-Git fetch origin | Out-Null
 Invoke-Git checkout main | Out-Null
-Invoke-Git pull origin main | Out-Null
+# Prefer hard reset: upstream may be force-pushed (orphan/history rewrite).
+Invoke-Git reset --hard origin/main | Out-Null
 $rev = (Invoke-Git rev-parse --short HEAD | Select-Object -Last 1).ToString().Trim()
 Write-Host ("Upstream  : {0}" -f $rev)
 
