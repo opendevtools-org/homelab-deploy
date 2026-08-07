@@ -53,7 +53,8 @@ echo "Updating  : $UPSTREAM"
 cd "$UPSTREAM"
 git fetch origin
 git checkout main
-git pull origin main
+# Prefer hard reset: upstream may be force-pushed (orphan/history rewrite).
+git reset --hard origin/main
 REV="$(git rev-parse --short HEAD)"
 echo "Upstream  : $REV"
 
