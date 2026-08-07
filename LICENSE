@@ -1,0 +1,48 @@
+﻿Copyright (c) 2024-2026 OpenDevTools contributors. All Rights Reserved.
+
+OpenDevTools End-User License
+(Public run + review; no code taking; no resale)
+
+This license applies to the official Docker images, deploy files, and any
+related materials published by OpenDevTools for Home Lab (Hub + PKM) and
+other products.
+
+## You MAY
+
+1. Download and run the official images/software for your own internal use
+   (including use inside your company).
+2. Review and inspect the software for security, operations, evaluation,
+   or compliance (including looking inside containers as needed to operate
+   or audit your deployment).
+3. Configure environment variables, volumes, and reverse proxies for your
+   own deployment.
+
+## You may NOT (without a separate written license from OpenDevTools)
+
+1. Take, copy, extract, or reuse the source code, assets, or substantial
+   portions of the implementation in another product or project.
+2. Redistribute, republish, mirror, or re-host the images or software for
+   others (publicly or privately), except as needed inside your own org
+   to run your own deployment.
+3. Sell, rent, lease, sublicense, or commercially redistribute the software
+   or images.
+4. Offer the software to third parties as a competing hosted / SaaS product.
+5. Remove or alter copyright, license, or attribution notices.
+6. Claim ownership of the software, trademarks, or branding of OpenDevTools.
+
+## Ideas vs implementation
+
+Copyright protects the expression/implementation of this software, not
+abstract ideas in the general sense. This license does not grant you rights
+to copy the implementation, UI structure as expressed in the code, or
+documentation text into another product. Building an independent product
+from your own original work is outside the scope of this license; copying
+or deriving from this codebase is not allowed.
+
+## No warranty
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR
+ANY CLAIM OR DAMAGES ARISING FROM THE SOFTWARE OR ITS USE.
+
+For redistribution, OEM, or SaaS rights, contact OpenDevTools.

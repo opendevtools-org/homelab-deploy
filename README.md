@@ -1,0 +1,134 @@
+# Homelab deploy (Hub + PKM)
+
+Docker Compose package: Hub gateway + PKM. Images on `ghcr.io/opendevtools-org`.
+
+Needs Docker Compose v2 and access to `ghcr.io`.
+
+Compose files (always use all three):
+
+| File | Role |
+|------|------|
+| `docker-compose.yml` | Hub + PKM |
+| `docker-compose.lan.yml` or `.local.yml` | host ports (pick one) |
+| `docker-compose.apps.yml` | your extra services (empty by default) |
+
+Scripts: PowerShell (`.ps1`) and Bash (`.sh`) are equivalent.
+
+## Flat install
+
+```bash
+git clone https://github.com/opendevtools-org/homelab-deploy.git
+cd homelab-deploy
+cp .env.example .env   # Windows: copy .env.example .env
+# fill secrets in .env
+
+docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml pull
+docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml up -d
+```
+
+Localhost: swap `lan` for `local`. Do not combine both.
+
+| | |
+|--|--|
+| Hub | http://SERVER:3080 |
+| PKM | http://SERVER:3030 |
+
+Login: `HUB_ADMIN_*` from `.env`. Create users under Utenti. Data in `./data/hub` and `./data/pkm` (gitignored).
+
+Upgrade (flat):
+
+```bash
+git pull
+docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml pull
+docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml up -d
+```
+
+## Site instance
+
+Your `data/` and apps stay in your git remote. Product code lives in submodule `upstream/`.
+
+### Convert — `New-HomelabSite`
+
+```bash
+chmod +x New-HomelabSite.sh Update-HomelabUpstream.sh
+./New-HomelabSite.sh --site-repo https://github.com/ORG/REPO.git --push --start
+```
+
+```powershell
+.\New-HomelabSite.ps1 -SiteRepo https://github.com/ORG/REPO.git -Push -Start
+```
+
+| Flag (bash / PowerShell) | Default | Effect |
+|------|---------|--------|
+| `--site-repo` / `-SiteRepo` | — | Your remote. Required unless skip-git. |
+| `--branch` / `-Branch` | `homelab` | Orphan branch on that remote. |
+| `--target-dir` / `-TargetDir` | script folder | Folder to convert. |
+| `--upstream-url` / `-UpstreamUrl` | this repo on GitHub | Submodule URL. |
+| `--ports` / `-Ports` `lan\|local` | `lan` | Ports overlay on start. |
+| `--push` / `-Push` | off | Push branch after commit. |
+| `--start` / `-Start` | off | Compose pull + up (includes apps). |
+| `--skip-git` / `-SkipGit` | off | Files + submodule only. |
+| `--skip-commit` / `-SkipCommit` | off | Skip local commit. |
+
+Layout after convert:
+
+```
+./upstream/
+./data/
+./.env
+./docker-compose.apps.yml
+./Update-HomelabUpstream.sh
+./Update-HomelabUpstream.ps1
+```
+
+Start:
+
+```bash
+docker compose --project-directory . \
+  -f upstream/docker-compose.yml \
+  -f upstream/docker-compose.lan.yml \
+  -f docker-compose.apps.yml up -d
+```
+
+`--project-directory .` so volumes hit this folder’s `data/`.
+
+### Update product — `Update-HomelabUpstream`
+
+No flags: only `git pull` in `upstream/`.
+
+```bash
+./Update-HomelabUpstream.sh
+./Update-HomelabUpstream.sh --commit --push --start
+```
+
+```powershell
+.\Update-HomelabUpstream.ps1
+.\Update-HomelabUpstream.ps1 -Commit -Push -Start
+```
+
+| Flag (bash / PowerShell) | Default | Effect |
+|------|---------|--------|
+| *(none)* | — | Pull in `upstream/` only. |
+| `--commit` / `-Commit` | off | Commit submodule pointer. |
+| `--push` / `-Push` | off | Push (implies commit). |
+| `--start` / `-Start` | off | Compose pull + up (includes apps). |
+| `--ports` / `-Ports` | `lan` | Ports overlay with start. |
+
+### Clone elsewhere
+
+```bash
+git clone -b homelab --recurse-submodules https://github.com/ORG/REPO.git
+cd REPO
+cp .env.example .env
+# fill secrets, then compose up as above
+```
+
+## Images
+
+`homelab-hub`, `homelab-platform`, `pkm-backend`, `pkm-frontend` under `ghcr.io/opendevtools-org`.
+
+While in test/dev, publish overwrites only `:latest` (`HOMELAB_VERSION` / `PKM_VERSION` default `latest`). For a real release later, publish with an explicit semver (e.g. `1.0.0`) and pin that in `.env`.
+
+## License
+
+OpenDevTools End-User License — internal run/review; no redistribution of images or reuse of the implementation without agreement.

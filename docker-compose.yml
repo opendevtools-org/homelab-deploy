@@ -1,0 +1,67 @@
+# Hub + PKM. Ports only in lan/local overlays (do not merge both).
+# Always pass apps overlay too (empty by default):
+#   docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml up -d
+# Site instance (after New-HomelabSite.ps1):
+#   docker compose --project-directory . -f upstream/docker-compose.yml -f upstream/docker-compose.lan.yml -f docker-compose.apps.yml up -d
+services:
+  hub-platform:
+    image: ghcr.io/opendevtools-org/homelab-platform:${HOMELAB_VERSION:-latest}
+    pull_policy: always
+    container_name: home-hub-platform
+    restart: unless-stopped
+    environment:
+      PLATFORM_DATA_DIR: /data
+      PLATFORM_SERVICE_TOKEN: ${PLATFORM_SERVICE_TOKEN:?set PLATFORM_SERVICE_TOKEN in .env}
+      PLATFORM_UPSTREAM_HOST: host.docker.internal
+      HUB_BUILTIN_PLUGINS: ${HUB_BUILTIN_PLUGINS:-pkm}
+      PUBLIC_PKM_URL: ${PUBLIC_PKM_URL:-http://127.0.0.1:3030/}
+      HUB_JWT_SECRET: ${HUB_JWT_SECRET:?set HUB_JWT_SECRET in .env}
+      HUB_ADMIN_USERNAME: ${HUB_ADMIN_USERNAME:-admin}
+      HUB_ADMIN_PASSWORD: ${HUB_ADMIN_PASSWORD:?set HUB_ADMIN_PASSWORD in .env}
+      HUB_ADMIN_EMAIL: ${HUB_ADMIN_EMAIL:-admin@localhost}
+      HUB_JWT_TTL_HOURS: ${HUB_JWT_TTL_HOURS:-24}
+      HUB_COOKIE_DOMAIN: ${HUB_COOKIE_DOMAIN:-}
+      HUB_COOKIE_SECURE: ${HUB_COOKIE_SECURE:-false}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      HUB_MARKET_CATALOG_URL: ${HUB_MARKET_CATALOG_URL:-https://raw.githubusercontent.com/opendevtools-org/hub-community-plugins/main/catalog.json}
+      HUB_MARKET_CATALOG_TTL_SEC: ${HUB_MARKET_CATALOG_TTL_SEC:-600}
+      HUB_MARKET_PRIVATE_PATH: ${HUB_MARKET_PRIVATE_PATH:-}
+    volumes:
+      - ./data/hub:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  hub:
+    image: ghcr.io/opendevtools-org/homelab-hub:${HOMELAB_VERSION:-latest}
+    pull_policy: always
+    container_name: home-hub
+    restart: unless-stopped
+    depends_on:
+      - hub-platform
+
+  pkm-backend:
+    image: ghcr.io/opendevtools-org/pkm-backend:${PKM_VERSION:-latest}
+    pull_policy: always
+    user: "${PUID:-1000}:${PGID:-1000}"
+    container_name: pkm-backend
+    restart: unless-stopped
+    volumes:
+      - ./data/pkm:/app/data
+    environment:
+      DATA_DIR: /app/data
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
+      HUB_SSO_URL: ${HUB_SSO_URL:-http://hub-platform:8090}
+      HUB_SERVICE_TOKEN: ${PLATFORM_SERVICE_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  pkm-frontend:
+    image: ghcr.io/opendevtools-org/pkm-frontend:${PKM_VERSION:-latest}
+    pull_policy: always
+    container_name: pkm-frontend
+    restart: unless-stopped
+    depends_on:
+      - pkm-backend

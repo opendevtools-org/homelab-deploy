@@ -1,0 +1,14 @@
+# Publish Hub + PKM on localhost only (this machine).
+# Use with base compose ONLY — do not also add docker-compose.lan.yml.
+services:
+  hub:
+    ports:
+      - "127.0.0.1:3080:80"
+
+  pkm-backend:
+    ports:
+      - "127.0.0.1:8001:8000"
+
+  pkm-frontend:
+    ports:
+      - "127.0.0.1:3030:80"

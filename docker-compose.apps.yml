@@ -1,0 +1,4 @@
+# Optional services for this host. Empty by default — add your own here.
+# Always included with the base compose (see README).
+
+services: {}
