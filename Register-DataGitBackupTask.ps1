@@ -3,9 +3,9 @@
   Registers a Windows Scheduled Task to run Backup-DataGit.ps1 daily.
 
 .DESCRIPTION
-  Registers for the current user. Tries ScheduledTasks cmdlets first, then
-  schtasks.exe. If both fail with access denied, re-run from an elevated
-  PowerShell (Run as administrator).
+  Prefers a current-user interactive task (/IT) so elevation is often not
+  required. Falls back to ScheduledTasks cmdlets, then schtasks without /IT.
+  If all fail, open PowerShell as Administrator and re-run.
 
 .EXAMPLE
   .\Register-DataGitBackupTask.ps1
@@ -39,46 +39,74 @@ if (-not (Test-Path $pwsh)) {
   throw "PowerShell executable not found at: $pwsh"
 }
 
+$schtasks = Join-Path $env:WINDIR "System32\schtasks.exe"
 $tr = '"{0}" -NoProfile -ExecutionPolicy Bypass -File "{1}"' -f $pwsh, $backupScript
+$userName = $env:USERNAME
 $registered = $false
-$lastError = $null
+$errors = New-Object System.Collections.Generic.List[string]
 
-# 1) Preferred: ScheduledTasks module (current user, interactive)
-try {
-  $action = New-ScheduledTaskAction -Execute $pwsh -Argument ("-NoProfile -ExecutionPolicy Bypass -File `"{0}`"" -f $backupScript)
-  $trigger = New-ScheduledTaskTrigger -Daily -At $Time
-  $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
-  # Omit Principal so the task is created in the current user context (often works without elevation).
-  Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
-  $registered = $true
-} catch {
-  $lastError = $_.Exception.Message
-  Write-Warning ("Register-ScheduledTask failed: {0}" -f $lastError)
-}
-
-# 2) Fallback: schtasks for current user
-if (-not $registered) {
-  $schtasks = Join-Path $env:WINDIR "System32\schtasks.exe"
+function Invoke-SchtasksCreate {
+  param([string[]]$ExtraArgs)
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  $out = & $schtasks /Create /TN $TaskName /SC DAILY /ST $Time /RL LIMITED /F /TR $tr 2>&1
+  $allArgs = @("/Create", "/TN", $TaskName, "/SC", "DAILY", "/ST", $Time, "/F", "/TR", $tr) + $ExtraArgs
+  $out = & $schtasks @allArgs 2>&1
   $code = $LASTEXITCODE
   $ErrorActionPreference = $prev
-  if ($code -eq 0) {
+  return @{ Code = $code; Output = (($out | Out-String).Trim()) }
+}
+
+# 1) Current-user interactive task — usually works without Administrator
+$r = Invoke-SchtasksCreate -ExtraArgs @("/IT", "/RL", "LIMITED", "/RU", $userName)
+if ($r.Code -eq 0) {
+  $registered = $true
+} else {
+  $errors.Add(("schtasks /IT: {0}" -f $r.Output)) | Out-Null
+}
+
+# 2) ScheduledTasks module (current session user)
+if (-not $registered) {
+  try {
+    $action = New-ScheduledTaskAction -Execute $pwsh -Argument ("-NoProfile -ExecutionPolicy Bypass -File `"{0}`"" -f $backupScript)
+    $trigger = New-ScheduledTaskTrigger -Daily -At $Time
+    $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+    Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Settings $settings -Force -ErrorAction Stop | Out-Null
+    $registered = $true
+  } catch {
+    $errors.Add(("Register-ScheduledTask: {0}" -f $_.Exception.Message)) | Out-Null
+  }
+}
+
+# 3) schtasks without /IT (may need elevation)
+if (-not $registered) {
+  $r = Invoke-SchtasksCreate -ExtraArgs @("/RL", "LIMITED")
+  if ($r.Code -eq 0) {
     $registered = $true
   } else {
-    $lastError = (($out | Out-String).Trim())
-    Write-Warning ("schtasks failed (exit {0}): {1}" -f $code, $lastError)
+    $errors.Add(("schtasks: {0}" -f $r.Output)) | Out-Null
   }
 }
 
 if (-not $registered) {
+  $detail = ($errors -join "`n")
   throw @"
 Access denied registering scheduled task '$TaskName'.
-Re-open PowerShell as Administrator in this folder and run:
-  .\Register-DataGitBackupTask.ps1 -Time $Time
-Last error: $lastError
+
+This Windows account cannot create scheduled tasks without elevation.
+
+1) Right-click PowerShell -> Run as administrator, then:
+   cd `"$repoRoot`"
+   .\Register-DataGitBackupTask.ps1 -Time $Time
+
+2) Or open Task Scheduler (taskschd.msc) as admin and create a Daily task
+   that runs:
+   $tr
+
+Errors:
+$detail
 "@
 }
 
-Write-Host ("Scheduled task '{0}' registered for every day at {1} (runs while this user is logged on)." -f $TaskName, $Time)
+Write-Host ("Scheduled task '{0}' registered for every day at {1}." -f $TaskName, $Time)
+Write-Host "Runs while this Windows user is logged on (/IT)."
+Write-Host "Test now: schtasks /Run /TN `"$TaskName`""
