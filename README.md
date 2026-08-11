@@ -79,6 +79,10 @@ Layout after convert:
 ./docker-compose.apps.yml
 ./Update-HomelabUpstream.sh
 ./Update-HomelabUpstream.ps1
+./Backup-DataGit.sh
+./Backup-DataGit.ps1
+./Register-DataGitBackup.sh
+./Register-DataGitBackupTask.ps1
 ```
 
 Start:
@@ -113,6 +117,27 @@ No flags: only `git pull` in `upstream/`.
 | `--push` / `-Push` | off | Push (implies commit). |
 | `--start` / `-Start` | off | Compose pull + up (includes apps). |
 | `--ports` / `-Ports` | `lan` | Ports overlay with start. |
+
+### Daily data backup — `Backup-DataGit`
+
+Site instances only (`data/` is versioned; flat install gitignores it). Commits and pushes only `data/`. If someone else pushed to the same branch, the script tries `pull --rebase`, then falls back to merge. Real conflicts abort and need a manual fix (no force-push).
+
+Optional notify webhook: `HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL`. Logs under `logs/`.
+
+Register a daily schedule (default `00:05`, change with `-Time` / `--time`):
+
+```powershell
+.\Register-DataGitBackupTask.ps1 -Time 00:05
+.\Backup-DataGit.ps1
+```
+
+```bash
+chmod +x Backup-DataGit.sh Register-DataGitBackup.sh
+./Register-DataGitBackup.sh --time 00:05
+./Backup-DataGit.sh
+```
+
+Host git credentials (SSH or credential helper) must already work for non-interactive push. Unregister Linux cron: `./Register-DataGitBackup.sh --uninstall`.
 
 ### Clone elsewhere
 

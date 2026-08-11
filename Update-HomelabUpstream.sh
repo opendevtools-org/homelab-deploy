@@ -59,22 +59,35 @@ REV="$(git rev-parse --short HEAD)"
 echo "Upstream  : $REV"
 
 # Refresh site-root launchers from product package
-for s in Update-HomelabUpstream.sh Update-HomelabUpstream.ps1; do
+LAUNCHERS=(
+  Update-HomelabUpstream.sh
+  Update-HomelabUpstream.ps1
+  Backup-DataGit.sh
+  Backup-DataGit.ps1
+  Register-DataGitBackup.sh
+  Register-DataGitBackupTask.ps1
+)
+REFRESHED=()
+for s in "${LAUNCHERS[@]}"; do
   if [[ -f "$UPSTREAM/$s" ]]; then
     cp -a "$UPSTREAM/$s" "$SITE_ROOT/$s"
     [[ "$s" == *.sh ]] && chmod +x "$SITE_ROOT/$s"
+    REFRESHED+=("$s")
   fi
 done
-echo "Refreshed site-root Update-HomelabUpstream.{sh,ps1}"
+if [[ ${#REFRESHED[@]} -gt 0 ]]; then
+  echo "Refreshed site-root: ${REFRESHED[*]}"
+fi
 
 cd "$SITE_ROOT"
 
 if [[ "$COMMIT" -eq 1 ]]; then
   [[ -d "$SITE_ROOT/.git" ]] || { echo "No .git in site root" >&2; exit 1; }
   git add upstream
-  [[ -f Update-HomelabUpstream.sh ]] && git add Update-HomelabUpstream.sh || true
-  [[ -f Update-HomelabUpstream.ps1 ]] && git add Update-HomelabUpstream.ps1 || true
-  if [[ -n "$(git status --porcelain -- upstream Update-HomelabUpstream.sh Update-HomelabUpstream.ps1 2>/dev/null || true)" ]]; then
+  for s in "${LAUNCHERS[@]}"; do
+    [[ -f "$s" ]] && git add "$s" || true
+  done
+  if [[ -n "$(git status --porcelain -- upstream "${LAUNCHERS[@]}" 2>/dev/null || true)" ]]; then
     git commit -m "Bump homelab-deploy upstream (${REV})."
     echo "Committed submodule pointer."
   else

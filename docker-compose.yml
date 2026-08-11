@@ -55,6 +55,7 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
       HUB_SSO_URL: ${HUB_SSO_URL:-http://hub-platform:8090}
       HUB_SERVICE_TOKEN: ${PLATFORM_SERVICE_TOKEN}
+      SCRIPT_FS_ROOTS: ${SCRIPT_FS_ROOTS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

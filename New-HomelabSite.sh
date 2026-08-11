@@ -104,7 +104,9 @@ if [[ "$already_site" -eq 0 ]]; then
     docker-compose.apps.yml docker-compose.apps.example.yml \
     LICENSE README.md \
     New-HomelabSite.ps1 New-HomelabSite.sh \
-    Update-HomelabUpstream.ps1 Update-HomelabUpstream.sh
+    Update-HomelabUpstream.ps1 Update-HomelabUpstream.sh \
+    Backup-DataGit.ps1 Backup-DataGit.sh \
+    Register-DataGitBackupTask.ps1 Register-DataGitBackup.sh
   do
     # keep apps.yml content via backup; remove product copy from root
     [[ "$f" == "docker-compose.apps.yml" ]] && continue
@@ -198,6 +200,7 @@ fi
 cat >"$TARGET_DIR/.gitignore" <<'EOF'
 .env
 *.tar
+logs/
 upstream/data/
 EOF
 
@@ -208,6 +211,8 @@ cat >"$TARGET_DIR/README.md" <<EOF
 - \`data/\` — volumes
 - \`docker-compose.apps.yml\` — extra services
 - \`.env\` — secrets (not committed)
+- \`Update-HomelabUpstream.*\` — pull product updates
+- \`Backup-DataGit.*\` / \`Register-DataGitBackup*\` — daily commit/push of \`data/\`
 
 ## Start
 
@@ -224,15 +229,35 @@ docker compose --project-directory . \\
 ./Update-HomelabUpstream.sh --commit --push --start
 # or: ./Update-HomelabUpstream.ps1 -Commit -Push -Start
 \`\`\`
+
+## Daily data backup
+
+Commits and pushes only \`data/\`. If origin advanced, tries rebase then merge; real conflicts need manual fix.
+
+\`\`\`bash
+./Register-DataGitBackup.sh --time 00:05
+./Backup-DataGit.sh
+\`\`\`
+
+\`\`\`powershell
+.\\Register-DataGitBackupTask.ps1 -Time 00:05
+.\\Backup-DataGit.ps1
+\`\`\`
 EOF
 
-for s in Update-HomelabUpstream.sh Update-HomelabUpstream.ps1; do
+for s in \
+  Update-HomelabUpstream.sh Update-HomelabUpstream.ps1 \
+  Backup-DataGit.sh Backup-DataGit.ps1 \
+  Register-DataGitBackup.sh Register-DataGitBackupTask.ps1
+do
   if [[ -f "$TARGET_DIR/upstream/$s" ]]; then
     cp -a "$TARGET_DIR/upstream/$s" "$TARGET_DIR/$s"
     [[ "$s" == *.sh ]] && chmod +x "$TARGET_DIR/$s"
   fi
 done
 [[ -f "$TARGET_DIR/upstream/New-HomelabSite.sh" ]] && chmod +x "$TARGET_DIR/upstream/New-HomelabSite.sh" || true
+[[ -f "$TARGET_DIR/upstream/Backup-DataGit.sh" ]] && chmod +x "$TARGET_DIR/upstream/Backup-DataGit.sh" || true
+[[ -f "$TARGET_DIR/upstream/Register-DataGitBackup.sh" ]] && chmod +x "$TARGET_DIR/upstream/Register-DataGitBackup.sh" || true
 
 if [[ "$SKIP_GIT" -eq 0 && "$SKIP_COMMIT" -eq 0 && -d "$TARGET_DIR/.git" ]]; then
   cd "$TARGET_DIR"

@@ -6,7 +6,8 @@
   Run from the site instance root (folder with upstream/, data/, .env),
   or from upstream/ itself.
 
-  After pull, refreshes Update-HomelabUpstream.ps1/.sh at the site root from upstream/.
+  After pull, refreshes site-root launchers from upstream/:
+  Update-HomelabUpstream.*, Backup-DataGit.*, Register-DataGitBackup*.
 
 .PARAMETER Ports
   lan | local. Default: lan
@@ -81,8 +82,16 @@ $rev = (Invoke-Git rev-parse --short HEAD | Select-Object -Last 1).ToString().Tr
 Write-Host ("Upstream  : {0}" -f $rev)
 
 # Keep site-root launchers in sync with product package
+$launcherNames = @(
+  "Update-HomelabUpstream.ps1",
+  "Update-HomelabUpstream.sh",
+  "Backup-DataGit.ps1",
+  "Backup-DataGit.sh",
+  "Register-DataGitBackupTask.ps1",
+  "Register-DataGitBackup.sh"
+)
 $refreshed = @()
-foreach ($name in @("Update-HomelabUpstream.ps1", "Update-HomelabUpstream.sh")) {
+foreach ($name in $launcherNames) {
   $src = Join-Path $upstream $name
   $dst = Join-Path $siteRoot $name
   if (Test-Path $src) {
@@ -101,14 +110,15 @@ if ($Commit) {
     throw "No .git in site root; cannot commit submodule pointer."
   }
   Invoke-Git add upstream | Out-Null
-  foreach ($name in @("Update-HomelabUpstream.ps1", "Update-HomelabUpstream.sh")) {
+  foreach ($name in $launcherNames) {
     if (Test-Path (Join-Path $siteRoot $name)) {
       Invoke-Git add $name | Out-Null
     }
   }
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  $porcelain = & git status --porcelain -- upstream Update-HomelabUpstream.ps1 Update-HomelabUpstream.sh 2>&1
+  $statusArgs = @("status", "--porcelain", "--", "upstream") + $launcherNames
+  $porcelain = & git @statusArgs 2>&1
   $ErrorActionPreference = $prev
   if ($porcelain) {
     Invoke-Git commit -m ("Bump homelab-deploy upstream ({0})." -f $rev) | Out-Null

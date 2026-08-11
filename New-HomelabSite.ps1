@@ -178,7 +178,11 @@ if (-not $alreadySite) {
     "New-HomelabSite.ps1",
     "New-HomelabSite.sh",
     "Update-HomelabUpstream.ps1",
-    "Update-HomelabUpstream.sh"
+    "Update-HomelabUpstream.sh",
+    "Backup-DataGit.ps1",
+    "Backup-DataGit.sh",
+    "Register-DataGitBackupTask.ps1",
+    "Register-DataGitBackup.sh"
   )
   foreach ($f in $productFiles) {
     $p = Join-Path $TargetDir $f
@@ -303,6 +307,7 @@ if (Test-Path (Join-Path $TargetDir "upstream\.env.example")) {
 Write-Utf8NoBom (Join-Path $TargetDir ".gitignore") @"
 .env
 *.tar
+logs/
 upstream/data/
 "@
 
@@ -316,6 +321,8 @@ Converted from a flat ``homelab-deploy`` install.
 - ``docker-compose.apps.yml`` — your extra services
 - ``.env`` — secrets (not committed)
 - ``Update-HomelabUpstream.ps1`` / ``.sh`` — pull product updates
+- ``Backup-DataGit.ps1`` / ``.sh`` — daily commit/push of ``data/``
+- ``Register-DataGitBackupTask.ps1`` / ``Register-DataGitBackup.sh`` — schedule that backup
 
 ## Start
 
@@ -332,11 +339,32 @@ docker compose --project-directory . \\
 ./Update-HomelabUpstream.sh --commit --push --start
 # Windows: .\\Update-HomelabUpstream.ps1 -Commit -Push -Start
 ``````
+
+## Daily data backup
+
+Commits and pushes only ``data/``. If origin advanced, tries rebase then merge; real conflicts need manual fix.
+
+``````powershell
+.\Register-DataGitBackupTask.ps1 -Time 00:05
+.\Backup-DataGit.ps1
+``````
+
+``````bash
+./Register-DataGitBackup.sh --time 00:05
+./Backup-DataGit.sh
+``````
 "@
 Write-Utf8NoBom (Join-Path $TargetDir "README.md") $readme
 
 # Launchers at site root (from upstream product package)
-foreach ($name in @("Update-HomelabUpstream.ps1", "Update-HomelabUpstream.sh")) {
+foreach ($name in @(
+  "Update-HomelabUpstream.ps1",
+  "Update-HomelabUpstream.sh",
+  "Backup-DataGit.ps1",
+  "Backup-DataGit.sh",
+  "Register-DataGitBackupTask.ps1",
+  "Register-DataGitBackup.sh"
+)) {
   $src = Join-Path $TargetDir ("upstream\{0}" -f $name)
   if (Test-Path $src) {
     Copy-Item $src (Join-Path $TargetDir $name) -Force
