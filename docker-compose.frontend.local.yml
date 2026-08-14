@@ -1,0 +1,10 @@
+# Publish web clients on localhost only.
+
+services:
+  hub:
+    ports:
+      - "127.0.0.1:3080:80"
+
+  pkm-frontend:
+    ports:
+      - "127.0.0.1:3030:80"

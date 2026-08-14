@@ -1,8 +1,11 @@
-# Hub + PKM. Ports only in lan/local overlays (do not merge both).
-# Always pass apps overlay too (empty by default):
+# Hub Platform + PKM API. Frontends are clients (docker-compose.frontend.yml).
+# Server:
 #   docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml up -d
-# Site instance (after New-HomelabSite.ps1):
+# Device (set HUB_API_UPSTREAM and PKM_API_UPSTREAM in .env):
+#   docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
+# Site instance:
 #   docker compose --project-directory . -f upstream/docker-compose.yml -f upstream/docker-compose.lan.yml -f docker-compose.apps.yml up -d
+
 services:
   hub-platform:
     image: ghcr.io/opendevtools-org/homelab-platform:${HOMELAB_VERSION:-latest}
@@ -32,14 +35,6 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
-  hub:
-    image: ghcr.io/opendevtools-org/homelab-hub:${HOMELAB_VERSION:-latest}
-    pull_policy: always
-    container_name: home-hub
-    restart: unless-stopped
-    depends_on:
-      - hub-platform
-
   pkm-backend:
     image: ghcr.io/opendevtools-org/pkm-backend:${PKM_VERSION:-latest}
     pull_policy: always
@@ -58,11 +53,3 @@ services:
       SCRIPT_FS_ROOTS: ${SCRIPT_FS_ROOTS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
-
-  pkm-frontend:
-    image: ghcr.io/opendevtools-org/pkm-frontend:${PKM_VERSION:-latest}
-    pull_policy: always
-    container_name: pkm-frontend
-    restart: unless-stopped
-    depends_on:
-      - pkm-backend

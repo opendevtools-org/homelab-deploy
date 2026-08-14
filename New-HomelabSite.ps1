@@ -170,8 +170,12 @@ if (Test-Path $gitDir) {
 if (-not $alreadySite) {
   $productFiles = @(
     "docker-compose.yml",
+    "docker-compose.backend.yml",
+    "docker-compose.frontend.yml",
     "docker-compose.lan.yml",
     "docker-compose.local.yml",
+    "docker-compose.frontend.lan.yml",
+    "docker-compose.frontend.local.yml",
     "docker-compose.apps.example.yml",
     "LICENSE",
     "README.md",

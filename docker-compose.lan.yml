@@ -1,15 +1,11 @@
-# Publish Hub + PKM on all interfaces (LAN / company server).
-# Use with base compose ONLY — do not also add docker-compose.local.yml
-# (Compose concatenates `ports` and would bind the same host port twice).
+# Publish backend APIs on all interfaces (LAN / company server).
+# Do not also add docker-compose.local.yml (Compose would bind the same port twice).
+
 services:
-  hub:
+  hub-platform:
     ports:
-      - "3080:80"
+      - "8090:8090"
 
   pkm-backend:
     ports:
       - "8001:8000"
-
-  pkm-frontend:
-    ports:
-      - "3030:80"

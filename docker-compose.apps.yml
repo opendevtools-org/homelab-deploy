@@ -1,4 +1,15 @@
-# Optional services for this host. Empty by default — add your own here.
-# Always included with the base compose (see README).
+# Optional extra BACKENDS for this host. Empty by default — add your own here.
+# Always included with the base backend compose (see README).
+#
+# Community market: Hub copies a command that downloads
+# plugins/<id>/docker-compose.backend.yml and appends it under include
+# (project_directory: . so bind mounts use this folder).
+#
+# Web clients are NOT included here — they run on devices via
+# docker-compose.frontend.yml of each plugin.
+#
+# include:
+#   - path: plugins/vibravid/docker-compose.backend.yml
+#     project_directory: .
 
 services: {}

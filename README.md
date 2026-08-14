@@ -1,20 +1,22 @@
 # Homelab deploy (Hub + PKM)
 
-Docker Compose package: Hub gateway + PKM. Images on `ghcr.io/opendevtools-org`.
+Docker Compose package. Images on `ghcr.io/opendevtools-org`.
 
 Needs Docker Compose v2 and access to `ghcr.io`.
 
-Compose files (always use all three):
+**Backend** (server) and **frontend** (device clients) are separate compose files.
 
-| File | Role |
-|------|------|
-| `docker-compose.yml` | Hub + PKM |
-| `docker-compose.lan.yml` or `.local.yml` | host ports (pick one) |
-| `docker-compose.apps.yml` | your extra services (empty by default) |
+| File | Where | Role |
+|------|--------|------|
+| `docker-compose.yml` | server | Hub Platform API + PKM API |
+| `docker-compose.lan.yml` or `.local.yml` | server | API host ports (pick one) |
+| `docker-compose.apps.yml` | server | extra **backends** (Market plugins) |
+| `docker-compose.frontend.yml` | device | Hub UI + PKM UI |
+| `docker-compose.frontend.lan.yml` or `.frontend.local.yml` | device | UI host ports |
 
 Scripts: PowerShell (`.ps1`) and Bash (`.sh`) are equivalent.
 
-## Flat install
+## Flat install — server (APIs)
 
 ```bash
 git clone https://github.com/opendevtools-org/homelab-deploy.git
@@ -30,12 +32,36 @@ Localhost: swap `lan` for `local`. Do not combine both.
 
 | | |
 |--|--|
-| Hub | http://SERVER:3080 |
-| PKM | http://SERVER:3030 |
+| Hub API | http://SERVER:8090 |
+| PKM API | http://SERVER:8001 |
 
-Login: `HUB_ADMIN_*` from `.env`. Create users under Utenti. Data in `./data/hub` and `./data/pkm` (gitignored).
+## Flat install — web clients (devices)
 
-Upgrade (flat):
+On each device (or on the same host if you still want hosted UIs), set the server URLs in `.env`:
+
+```bash
+# HUB_API_UPSTREAM=http://SERVER:8090
+# PKM_API_UPSTREAM=http://SERVER:8001
+docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
+```
+
+| | |
+|--|--|
+| Hub UI | http://DEVICE:3080 |
+| PKM UI | http://DEVICE:3030 |
+
+Login: `HUB_ADMIN_*` from `.env`. Create users under Utenti. Data in `./data/hub` and `./data/pkm` (gitignored) on the **server**.
+
+## Community plugins (Hub Market)
+
+Public plugins live in [`opendevtools-org/hub-community-plugins`](https://github.com/opendevtools-org/hub-community-plugins).
+
+- **Backend:** `plugins/<id>/docker-compose.backend.yml` — Market copies this into `docker-compose.apps.yml` on the server.
+- **Web client:** `plugins/<id>/docker-compose.frontend.yml` — run on a device with `*_API_UPSTREAM` pointing at the server.
+
+From Hub `/market`, **Installa** starts the plugin backend on the Platform server and opens the web client in that Hub (`/p/{id}/`). Merge the plugin’s `.env.example` into `.env` if it has one.
+
+Upgrade (flat, server):
 
 ```bash
 git pull

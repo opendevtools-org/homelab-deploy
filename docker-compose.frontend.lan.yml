@@ -1,0 +1,10 @@
+# Publish web clients on all interfaces.
+
+services:
+  hub:
+    ports:
+      - "3080:80"
+
+  pkm-frontend:
+    ports:
+      - "3030:80"

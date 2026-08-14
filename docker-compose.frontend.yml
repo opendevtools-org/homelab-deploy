@@ -1,0 +1,27 @@
+# Web clients — run on devices (or on the same host if you want hosted UIs).
+# Set HUB_API_UPSTREAM and PKM_API_UPSTREAM to the server (LAN IP or hostname).
+# Same-host default uses Docker DNS (hub-platform / pkm-backend) when this file
+# is combined with docker-compose.yml in one `docker compose -f …` command.
+
+services:
+  hub:
+    image: ghcr.io/opendevtools-org/homelab-hub:${HOMELAB_VERSION:-latest}
+    pull_policy: always
+    container_name: home-hub
+    restart: unless-stopped
+    environment:
+      HUB_API_UPSTREAM: ${HUB_API_UPSTREAM:-http://hub-platform:8090}
+      NGINX_ENVSUBST_FILTER: ^HUB_API_UPSTREAM$
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  pkm-frontend:
+    image: ghcr.io/opendevtools-org/pkm-frontend:${PKM_VERSION:-latest}
+    pull_policy: always
+    container_name: pkm-frontend
+    restart: unless-stopped
+    environment:
+      PKM_API_UPSTREAM: ${PKM_API_UPSTREAM:-http://pkm-backend:8000}
+      NGINX_ENVSUBST_FILTER: ^PKM_API_UPSTREAM$
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
