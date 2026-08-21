@@ -93,6 +93,62 @@ function Invoke-GitQuiet {
   return $code
 }
 
+# Docker Desktop on locked/RDP/corporate Windows sessions often cannot
+# unlock the credential store. Public pulls can proceed with an empty
+# Docker config and the desktop helper removed from PATH.
+$script:UseAnonymousDockerConfig = $false
+$script:AnonymousDockerConfig = $null
+
+function Test-DockerCredentialHelperError {
+  param($Output)
+  $text = ($Output | ForEach-Object { [string]$_ }) -join "`n"
+  return [bool]($text -match '(?i)error getting credentials|logon session does not exist|sessione di accesso')
+}
+
+function Initialize-AnonymousDockerConfig {
+  if ($script:AnonymousDockerConfig) { return }
+  $script:UseAnonymousDockerConfig = $true
+  $script:AnonymousDockerConfig = Join-Path ([IO.Path]::GetTempPath()) ("homelab-docker-anonymous-" + [guid]::NewGuid().ToString("n"))
+  [IO.Directory]::CreateDirectory($script:AnonymousDockerConfig) | Out-Null
+  [IO.File]::WriteAllText((Join-Path $script:AnonymousDockerConfig "config.json"), "{}", [Text.UTF8Encoding]::new($false))
+}
+
+function Clear-AnonymousDockerConfig {
+  if ($script:AnonymousDockerConfig -and (Test-Path -LiteralPath $script:AnonymousDockerConfig)) {
+    Remove-Item -LiteralPath $script:AnonymousDockerConfig -Recurse -Force -ErrorAction SilentlyContinue
+  }
+  $script:AnonymousDockerConfig = $null
+  $script:UseAnonymousDockerConfig = $false
+}
+
+function Invoke-DockerCommand {
+  param([string[]]$DockerArgs)
+
+  if (-not $script:UseAnonymousDockerConfig) {
+    $output = & docker @DockerArgs 2>&1
+    $code = $LASTEXITCODE
+    foreach ($line in $output) { Write-Host $line }
+    if ($code -eq 0) { return 0 }
+    if (-not (Test-DockerCredentialHelperError $output)) { return $code }
+
+    Write-Warning "Docker Desktop credential helper is unavailable in this Windows session; retrying public image access without a credential store."
+    Initialize-AnonymousDockerConfig
+  }
+
+  $dockerPath = (Get-Command docker.exe -ErrorAction Stop).Source
+  $dockerBin = (Split-Path -Parent $dockerPath).TrimEnd("\")
+  $previousPath = $env:PATH
+  try {
+    $env:PATH = (($previousPath -split ";" | Where-Object {
+      $_ -and -not [string]::Equals($_.Trim().Trim('"').TrimEnd("\"), $dockerBin, [StringComparison]::OrdinalIgnoreCase)
+    }) -join ";")
+    & $dockerPath --config $script:AnonymousDockerConfig @DockerArgs 2>&1 | ForEach-Object { Write-Host $_ }
+    return $LASTEXITCODE
+  } finally {
+    $env:PATH = $previousPath
+  }
+}
+
 function Write-Utf8NoBom([string]$Path, [string]$Content) {
   $dir = Split-Path -Parent $Path
   if ($dir -and -not (Test-Path $dir)) {
@@ -537,45 +593,36 @@ if ($Start) {
   # Stop old flat project containers if names conflict
   Write-Host "Starting Compose (backend then frontend)..."
   $prev = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  foreach ($n in @("pkm-backend", "pkm-frontend", "home-hub", "home-hub-platform")) {
-    & docker rm -f $n 2>&1 | Out-Null
+  try {
+    $ErrorActionPreference = "Continue"
+    foreach ($n in @("pkm-backend", "pkm-frontend", "home-hub", "home-hub-platform")) {
+      & docker rm -f $n 2>&1 | Out-Null
+    }
+    $backendComposeArgs = @(
+      "compose", "--project-directory", ".",
+      "-f", "upstream/docker-compose.backend.yml",
+      "-f", ("upstream/{0}" -f $portsFile),
+      "-f", "docker-compose.config.yml",
+      "-f", "docker-compose.apps.yml"
+    )
+    $code = Invoke-DockerCommand ($backendComposeArgs + @("pull"))
+    if ($code -ne 0) { throw "docker compose pull failed" }
+    $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d"))
+    if ($code -ne 0) { throw "docker compose up failed" }
+    $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force", "--stop", "pkm-data-permissions"))
+    $frontendComposeArgs = @(
+      "compose", "--project-directory", ".",
+      "-f", "upstream/docker-compose.frontend.yml",
+      "-f", ("upstream/{0}" -f $frontendPortsFile)
+    )
+    $code = Invoke-DockerCommand ($frontendComposeArgs + @("pull"))
+    if ($code -ne 0) { throw "docker compose frontend pull failed" }
+    $code = Invoke-DockerCommand ($frontendComposeArgs + @("up", "-d"))
+    if ($code -ne 0) { throw "docker compose frontend up failed" }
+  } finally {
+    $ErrorActionPreference = $prev
+    Clear-AnonymousDockerConfig
   }
-  & docker compose --project-directory . `
-    -f upstream/docker-compose.backend.yml `
-    -f ("upstream/{0}" -f $portsFile) `
-    -f docker-compose.config.yml `
-    -f docker-compose.apps.yml `
-    pull
-  if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = $prev; throw "docker compose pull failed" }
-  & docker compose --project-directory . `
-    -f upstream/docker-compose.backend.yml `
-    -f ("upstream/{0}" -f $portsFile) `
-    -f docker-compose.config.yml `
-    -f docker-compose.apps.yml `
-    up -d
-  $code = $LASTEXITCODE
-  $ErrorActionPreference = $prev
-  if ($code -ne 0) { throw "docker compose up failed" }
-  $ErrorActionPreference = "Continue"
-  & docker compose --project-directory . `
-    -f upstream/docker-compose.backend.yml `
-    -f ("upstream/{0}" -f $portsFile) `
-    -f docker-compose.config.yml `
-    -f docker-compose.apps.yml `
-    rm --force --stop pkm-data-permissions 2>&1 | Out-Null
-  & docker compose --project-directory . `
-    -f upstream/docker-compose.frontend.yml `
-    -f ("upstream/{0}" -f $frontendPortsFile) `
-    pull
-  if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = $prev; throw "docker compose frontend pull failed" }
-  & docker compose --project-directory . `
-    -f upstream/docker-compose.frontend.yml `
-    -f ("upstream/{0}" -f $frontendPortsFile) `
-    up -d
-  $code = $LASTEXITCODE
-  $ErrorActionPreference = $prev
-  if ($code -ne 0) { throw "docker compose frontend up failed" }
 }
 
 Write-Host ""
