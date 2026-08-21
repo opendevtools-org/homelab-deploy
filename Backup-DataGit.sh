@@ -60,6 +60,30 @@ die() {
   exit 1
 }
 
+reindex_pkm_after_sync() {
+  local helper="$SCRIPT_ROOT/Reindex-PkmFromDisk.sh"
+  local out code
+  if [[ ! -f "$helper" ]]; then
+    notify "INFO" "PKM disk reindex skipped (Reindex-PkmFromDisk.sh not found)."
+    return 0
+  fi
+  chmod +x "$helper" 2>/dev/null || true
+  set +e
+  out="$(/bin/bash "$helper" 2>&1)"
+  code=$?
+  set -e
+  [[ -n "$out" ]] && printf '%s\n' "$out"
+  if [[ "$code" -ne 0 ]]; then
+    notify "WARN" "PKM disk reindex failed after git sync. Use Import from disk in the PKM UI if items are missing."
+    return 0
+  fi
+  if printf '%s' "$out" | grep -q "skipped"; then
+    notify "INFO" "$(printf '%s\n' "$out" | tail -n 1)"
+    return 0
+  fi
+  notify "INFO" "PKM imported pages, files, PDFs, and bookmarks from disk."
+}
+
 build_git_auth_args() {
   local origin_url username auth_token auth_raw auth_b64
 
@@ -193,3 +217,4 @@ fi
 git_auth push origin "$BRANCH"
 
 notify "INFO" "Backup/sync of data/, docker-compose.apps.yml, and README.md completed on branch '${BRANCH}'."
+reindex_pkm_after_sync

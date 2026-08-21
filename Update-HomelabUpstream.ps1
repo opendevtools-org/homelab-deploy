@@ -8,7 +8,8 @@
 
   After pull, refreshes site-root launchers from upstream/:
     Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*,
-    Register-DataGitBackup*, Register-DataGitPull*, docker-compose.config.yml.
+    Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
+    docker-compose.config.yml.
 
 .PARAMETER Ports
   lan | local. Default: lan
@@ -20,7 +21,8 @@
   git push after integrating origin (rebase, then merge fallback). Implies commit.
 
 .PARAMETER Start
-  docker compose pull && up -d after updating the submodule.
+  docker compose pull && up -d after updating the submodule, then import
+  PKM pages/files/PDFs/bookmarks from disk (same as Reindex-PkmFromDisk).
 
 .EXAMPLE
   cd C:\Projects\homelab-deploy
@@ -96,6 +98,8 @@ $launcherNames = @(
   "Pull-DataGit.sh",
   "Register-DataGitPullTask.ps1",
   "Register-DataGitPull.sh",
+  "Reindex-PkmFromDisk.ps1",
+  "Reindex-PkmFromDisk.sh",
   "docker-compose.config.yml"
 )
 $refreshed = @()
@@ -205,6 +209,23 @@ if ($Start) {
   $ErrorActionPreference = $prev
   if ($code -ne 0) { throw "docker compose frontend up failed" }
   Write-Host "Compose up done."
+
+  $helper = Join-Path $siteRoot "Reindex-PkmFromDisk.ps1"
+  if (-not (Test-Path $helper)) {
+    Write-Host "PKM disk reindex skipped (Reindex-PkmFromDisk.ps1 not found)."
+  } else {
+    Write-Host "Importing PKM pages, files, PDFs, and bookmarks from disk..."
+    $shell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $ErrorActionPreference = "Continue"
+    $output = & $shell -NoProfile -ExecutionPolicy Bypass -File $helper 2>&1
+    $reindexCode = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    $text = ($output | Out-String).Trim()
+    if ($text) { Write-Host $text }
+    if ($reindexCode -ne 0) {
+      Write-Warning "PKM disk reindex failed after Compose up. Use Import from disk in the PKM UI if items are missing."
+    }
+  }
 }
 
 Write-Host "Done."

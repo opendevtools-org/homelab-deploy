@@ -129,6 +129,8 @@ Layout after convert:
 ./Register-DataGitBackupTask.ps1
 ./Register-DataGitPull.sh
 ./Register-DataGitPullTask.ps1
+./Reindex-PkmFromDisk.sh
+./Reindex-PkmFromDisk.ps1
 ```
 
 Start:
@@ -165,7 +167,7 @@ No flags: only `git pull` in `upstream/`.
 | *(none)* | — | Pull in `upstream/` only. |
 | `--commit` / `-Commit` | off | Commit submodule pointer. |
 | `--push` / `-Push` | off | Rebase onto origin, then push (implies commit). |
-| `--start` / `-Start` | off | Compose pull + up (includes apps). |
+| `--start` / `-Start` | off | Compose pull + up (includes apps), then PKM import from disk. |
 | `--ports` / `-Ports` | `lan` | Ports overlay with start. |
 
 ### Daily data backup — `Backup-DataGit`
@@ -205,6 +207,8 @@ If both machines can receive edits, schedule Git on both:
 - standby: `Pull-DataGit.sh` or `Pull-DataGit.ps1`
 
 The standby pull first commits local changes in `data/`, `docker-compose.apps.yml`, and `README.md`, then syncs with `origin` and pushes. Edits made on either server reach the other on the next run.
+
+After a successful Backup or Pull, the scripts restart the `pkm-backend` container and call the same APIs as **Import from disk** / **Sync from disk** in the UI (pages, files, PDFs, bookmarks). PKM is down for a few seconds during the restart. Skip with `HOMELAB_PKM_REINDEX_AFTER_SYNC=false` in `.env`, or run `./Reindex-PkmFromDisk.sh` / `.\Reindex-PkmFromDisk.ps1` by itself.
 
 ```powershell
 .\Register-DataGitPullTask.ps1 -Time 00:10

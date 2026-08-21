@@ -113,6 +113,7 @@ if [[ "$already_site" -eq 0 ]]; then
     Register-DataGitBackupTask.ps1 Register-DataGitBackup.sh \
     Pull-DataGit.ps1 Pull-DataGit.sh \
     Register-DataGitPullTask.ps1 Register-DataGitPull.sh \
+    Reindex-PkmFromDisk.ps1 Reindex-PkmFromDisk.sh \
     docker-compose.config.yml
   do
     # keep apps.yml content via backup; remove product copy from root
@@ -224,6 +225,7 @@ cat >"$TARGET_DIR/README.md" <<EOF
 - \`Update-HomelabUpstream.*\` — pull product updates
 - \`Backup-DataGit.*\` / \`Register-DataGitBackup*\` — primary server commit/push
 - \`Pull-DataGit.*\` / \`Register-DataGitPull*\` — standby server sync
+- \`Reindex-PkmFromDisk.*\` — after git sync, import PKM pages/files/PDFs/bookmarks from disk
 
 ## Start
 
@@ -251,6 +253,7 @@ Optional HTTPS auth in \`.env\`: \`HOMELAB_GIT_USERNAME\` and \`HOMELAB_GIT_PAT\
 
 Two servers with the same data: primary runs Backup (00:05), standby runs Pull (00:10).
 Conflicts keep the remote file and save the local copy as \`name.local-conflict.HOST.TIMESTAMP.ext\`.
+After each sync, PKM restarts briefly and imports pages, files, PDFs, and bookmarks from disk (same as Import from disk in the UI). Set \`HOMELAB_PKM_REINDEX_AFTER_SYNC=false\` in \`.env\` to skip.
 
 \`\`\`bash
 ./Register-DataGitBackup.sh --time 00:05
@@ -273,6 +276,7 @@ for s in \
   Register-DataGitBackup.sh Register-DataGitBackupTask.ps1 \
   Pull-DataGit.sh Pull-DataGit.ps1 \
   Register-DataGitPull.sh Register-DataGitPullTask.ps1 \
+  Reindex-PkmFromDisk.sh Reindex-PkmFromDisk.ps1 \
   docker-compose.config.yml
 do
   if [[ -f "$TARGET_DIR/upstream/$s" ]]; then
@@ -285,6 +289,7 @@ done
 [[ -f "$TARGET_DIR/upstream/Register-DataGitBackup.sh" ]] && chmod +x "$TARGET_DIR/upstream/Register-DataGitBackup.sh" || true
 [[ -f "$TARGET_DIR/upstream/Pull-DataGit.sh" ]] && chmod +x "$TARGET_DIR/upstream/Pull-DataGit.sh" || true
 [[ -f "$TARGET_DIR/upstream/Register-DataGitPull.sh" ]] && chmod +x "$TARGET_DIR/upstream/Register-DataGitPull.sh" || true
+[[ -f "$TARGET_DIR/upstream/Reindex-PkmFromDisk.sh" ]] && chmod +x "$TARGET_DIR/upstream/Reindex-PkmFromDisk.sh" || true
 
 if [[ "$SKIP_GIT" -eq 0 && "$SKIP_COMMIT" -eq 0 && -d "$TARGET_DIR/.git" ]]; then
   cd "$TARGET_DIR"

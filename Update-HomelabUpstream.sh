@@ -71,6 +71,8 @@ LAUNCHERS=(
   Pull-DataGit.ps1
   Register-DataGitPull.sh
   Register-DataGitPullTask.ps1
+  Reindex-PkmFromDisk.sh
+  Reindex-PkmFromDisk.ps1
   docker-compose.config.yml
 )
 REFRESHED=()
@@ -142,6 +144,21 @@ if [[ "$START" -eq 1 ]]; then
     -f upstream/docker-compose.frontend.yml \
     -f "upstream/$FRONTEND_PORTS_FILE" up -d
   echo "Compose up done."
+
+  helper="$SITE_ROOT/Reindex-PkmFromDisk.sh"
+  if [[ ! -f "$helper" ]]; then
+    echo "PKM disk reindex skipped (Reindex-PkmFromDisk.sh not found)."
+  else
+    echo "Importing PKM pages, files, PDFs, and bookmarks from disk..."
+    chmod +x "$helper" 2>/dev/null || true
+    set +e
+    /bin/bash "$helper"
+    reindex_code=$?
+    set -e
+    if [[ "$reindex_code" -ne 0 ]]; then
+      echo "PKM disk reindex failed after Compose up. Use Import from disk in the PKM UI if items are missing." >&2
+    fi
+  fi
 fi
 
 echo "Done."

@@ -6,6 +6,8 @@
   For backup/standby site instances. Commits local site data changes if needed,
   syncs with origin, archives local conflict copies when the same file changed
   on both servers, pushes the synchronized branch, then updates submodules.
+  After a successful sync, restarts PKM and imports pages/files/PDFs/bookmarks
+  from disk (same as Import from disk in the UI).
 
 .EXAMPLE
   .\Pull-DataGit.ps1
@@ -217,7 +219,7 @@ function Sync-WithOrigin {
 
 function Send-Notification {
   param(
-    [ValidateSet("INFO", "ERROR")]
+    [ValidateSet("INFO", "WARN", "ERROR")]
     [string]$Level,
     [string]$Message
   )
@@ -253,6 +255,35 @@ function Send-Notification {
   }
 }
 
+function Invoke-PkmDiskReindex {
+  $helper = Join-Path $repoRoot "Reindex-PkmFromDisk.ps1"
+  if (-not (Test-Path $helper)) {
+    Send-Notification -Level "INFO" -Message "PKM disk reindex skipped (Reindex-PkmFromDisk.ps1 not found)."
+    return
+  }
+
+  $shell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $output = & $shell -NoProfile -ExecutionPolicy Bypass -File $helper 2>&1
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+
+  $text = ($output | Out-String).Trim()
+  if ($text) { Write-Host $text }
+
+  if ($code -ne 0) {
+    Send-Notification -Level "WARN" -Message "PKM disk reindex failed after git sync. Use Import from disk in the PKM UI if items are missing."
+    return
+  }
+  if ($text -match "skipped") {
+    $last = ($text -split "`r?`n" | Where-Object { $_.Trim() } | Select-Object -Last 1)
+    Send-Notification -Level "INFO" -Message $last
+    return
+  }
+  Send-Notification -Level "INFO" -Message "PKM imported pages, files, PDFs, and bookmarks from disk."
+}
+
 $repoRoot = $PSScriptRoot
 if ([string]::IsNullOrWhiteSpace($NotificationLog)) {
   $NotificationLog = Join-Path $repoRoot "logs\pull-data-git.log"
@@ -282,6 +313,7 @@ try {
   $ok = "Pull/sync completed with origin/{0}." -f $branch
   Write-Host $ok
   Send-Notification -Level "INFO" -Message $ok
+  Invoke-PkmDiskReindex
 } catch {
   $err = "Pull failed: {0}" -f $_.Exception.Message
   Send-Notification -Level "ERROR" -Message $err

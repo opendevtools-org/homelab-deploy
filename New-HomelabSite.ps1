@@ -196,6 +196,8 @@ if (-not $alreadySite) {
     "Pull-DataGit.sh",
     "Register-DataGitPullTask.ps1",
     "Register-DataGitPull.sh",
+    "Reindex-PkmFromDisk.ps1",
+    "Reindex-PkmFromDisk.sh",
     "docker-compose.config.yml"
   )
   foreach ($f in $productFiles) {
@@ -340,6 +342,7 @@ Converted from a flat ``homelab-deploy`` install.
 - ``Update-HomelabUpstream.ps1`` / ``.sh`` — pull product updates
 - ``Backup-DataGit.ps1`` / ``.sh`` — primary server: commit/push site data
 - ``Pull-DataGit.ps1`` / ``.sh`` — standby server: sync from origin
+- ``Reindex-PkmFromDisk.ps1`` / ``.sh`` — after git sync, import PKM items from disk
 - ``Register-DataGitBackup*`` / ``Register-DataGitPull*`` — daily schedules
 
 ## Start
@@ -373,6 +376,8 @@ Two servers with the same data:
 
 If the same file changed on both sides, the remote copy stays canonical and the local copy is saved as ``name.local-conflict.HOST.TIMESTAMP.ext``.
 
+After each sync, PKM restarts briefly and imports pages, files, PDFs, and bookmarks from disk (same as Import from disk in the UI). Set ``HOMELAB_PKM_REINDEX_AFTER_SYNC=false`` in ``.env`` to skip.
+
 ``````powershell
 .\Register-DataGitBackupTask.ps1 -Time 00:05
 .\Backup-DataGit.ps1
@@ -401,6 +406,8 @@ foreach ($name in @(
   "Pull-DataGit.sh",
   "Register-DataGitPullTask.ps1",
   "Register-DataGitPull.sh",
+  "Reindex-PkmFromDisk.ps1",
+  "Reindex-PkmFromDisk.sh",
   "docker-compose.config.yml"
 )) {
   $src = Join-Path $TargetDir ("upstream\{0}" -f $name)
