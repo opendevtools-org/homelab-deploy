@@ -205,14 +205,27 @@ fi
 
 [[ -f "$TARGET_DIR/upstream/.env.example" ]] && cp -a "$TARGET_DIR/upstream/.env.example" "$TARGET_DIR/.env.example"
 
-cat >"$TARGET_DIR/.gitignore" <<'EOF'
+if [[ -f "$TARGET_DIR/upstream/.gitignore" ]]; then
+  cp -a "$TARGET_DIR/upstream/.gitignore" "$TARGET_DIR/.gitignore"
+else
+  cat >"$TARGET_DIR/.gitignore" <<'EOF'
 .env
+.env.zip
 *.tar
-logs/
+*.log
+*.permissions-owner
+*.py[cod]
+*.db-wal
+*.db-shm
+__pycache__/
+tmp-*
 upstream/data/
-**/__pycache__/
+logs/
 data/pkm/scripts/**/.uploads/
+cli/docker/resources/docker-env/temp-docker-compose-*
+*.local-conflict.*
 EOF
+fi
 
 cat >"$TARGET_DIR/README.md" <<EOF
 # Homelab site instance
@@ -277,7 +290,8 @@ for s in \
   Pull-DataGit.sh Pull-DataGit.ps1 \
   Register-DataGitPull.sh Register-DataGitPullTask.ps1 \
   Reindex-PkmFromDisk.sh Reindex-PkmFromDisk.ps1 \
-  docker-compose.config.yml
+  docker-compose.config.yml \
+  .gitignore
 do
   if [[ -f "$TARGET_DIR/upstream/$s" ]]; then
     cp -a "$TARGET_DIR/upstream/$s" "$TARGET_DIR/$s"

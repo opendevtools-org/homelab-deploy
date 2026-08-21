@@ -320,14 +320,28 @@ if (Test-Path (Join-Path $TargetDir "upstream\.env.example")) {
   Copy-Item (Join-Path $TargetDir "upstream\.env.example") (Join-Path $TargetDir ".env.example") -Force
 }
 
-Write-Utf8NoBom (Join-Path $TargetDir ".gitignore") @"
+$gitignoreSrc = Join-Path $TargetDir "upstream\.gitignore"
+if (Test-Path $gitignoreSrc) {
+  Copy-Item $gitignoreSrc (Join-Path $TargetDir ".gitignore") -Force
+} else {
+  Write-Utf8NoBom (Join-Path $TargetDir ".gitignore") @"
 .env
+.env.zip
 *.tar
-logs/
+*.log
+*.permissions-owner
+*.py[cod]
+*.db-wal
+*.db-shm
+__pycache__/
+tmp-*
 upstream/data/
-**/__pycache__/
+logs/
 data/pkm/scripts/**/.uploads/
+cli/docker/resources/docker-env/temp-docker-compose-*
+*.local-conflict.*
 "@
+}
 
 $readme = @"
 # Homelab site instance
@@ -408,7 +422,8 @@ foreach ($name in @(
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",
   "Reindex-PkmFromDisk.sh",
-  "docker-compose.config.yml"
+  "docker-compose.config.yml",
+  ".gitignore"
 )) {
   $src = Join-Path $TargetDir ("upstream\{0}" -f $name)
   if (Test-Path $src) {

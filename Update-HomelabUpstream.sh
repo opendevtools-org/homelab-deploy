@@ -74,6 +74,7 @@ LAUNCHERS=(
   Reindex-PkmFromDisk.sh
   Reindex-PkmFromDisk.ps1
   docker-compose.config.yml
+  .gitignore
 )
 REFRESHED=()
 for s in "${LAUNCHERS[@]}"; do

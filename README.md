@@ -172,7 +172,7 @@ No flags: only `git pull` in `upstream/`.
 
 ### Daily data backup — `Backup-DataGit`
 
-Site instances only (`data/` is versioned; flat install gitignores it). Commits and pushes `data/`, `docker-compose.apps.yml`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge. On a real conflict it keeps the remote file as canonical and saves the local copy next to it:
+Site instances only (`data/` is versioned). `New-HomelabSite` copies this package's `.gitignore` (secrets, logs, SQLite WAL, uploads, conflict copies). Commits and pushes `data/`, `docker-compose.apps.yml`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge. On a real conflict it keeps the remote file as canonical and saves the local copy next to it:
 
 ```text
 filename.local-conflict.HOSTNAME.20260820-143000.md

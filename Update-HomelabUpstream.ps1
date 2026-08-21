@@ -9,7 +9,7 @@
   After pull, refreshes site-root launchers from upstream/:
     Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*,
     Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
-    docker-compose.config.yml.
+    docker-compose.config.yml, .gitignore.
 
 .PARAMETER Ports
   lan | local. Default: lan
@@ -100,7 +100,8 @@ $launcherNames = @(
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",
   "Reindex-PkmFromDisk.sh",
-  "docker-compose.config.yml"
+  "docker-compose.config.yml",
+  ".gitignore"
 )
 $refreshed = @()
 foreach ($name in $launcherNames) {

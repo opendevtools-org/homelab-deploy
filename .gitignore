@@ -1,5 +1,15 @@
-data/
 .env
 .env.zip
 *.tar
+*.log
+*.permissions-owner
+*.py[cod]
+*.db-wal
+*.db-shm
+__pycache__/
+tmp-*
+upstream/data/
 logs/
+data/pkm/scripts/**/.uploads/
+cli/docker/resources/docker-env/temp-docker-compose-*
+*.local-conflict.*
