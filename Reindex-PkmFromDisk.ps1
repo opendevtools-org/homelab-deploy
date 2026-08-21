@@ -8,9 +8,12 @@
 
 .EXAMPLE
   .\Reindex-PkmFromDisk.ps1
+  .\Reindex-PkmFromDisk.ps1 -SkipRestart
 #>
 [CmdletBinding()]
-param()
+param(
+  [switch]$SkipRestart
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
@@ -77,9 +80,13 @@ $running = (& docker inspect -f "{{.State.Running}}" $container 2>&1 | Select-Ob
 $ErrorActionPreference = "Stop"
 
 if ($running -eq "true") {
-  & docker restart $container | Out-Null
-  if ($LASTEXITCODE -ne 0) { throw ("Failed to restart container '{0}'." -f $container) }
-  Write-Host ("Restarted {0} so SQLite reopens after git sync." -f $container)
+  if ($SkipRestart) {
+    Write-Host ("Using running {0}." -f $container)
+  } else {
+    & docker restart $container | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw ("Failed to restart container '{0}'." -f $container) }
+    Write-Host ("Restarted {0} so SQLite reopens after git sync." -f $container)
+  }
 } else {
   & docker start $container | Out-Null
   if ($LASTEXITCODE -ne 0) { throw ("Failed to start container '{0}'." -f $container) }
@@ -98,6 +105,10 @@ ENDPOINTS = (
     "/system/reindex-pdfs",
     "/system/reindex-bookmarks",
 )
+
+
+def log(msg):
+    print(msg, flush=True)
 
 
 def request(method, path, data=None, token=None, timeout=300, content_type=None, raw=None):
@@ -122,12 +133,15 @@ def request(method, path, data=None, token=None, timeout=300, content_type=None,
 
 def wait_health():
     last = "timeout"
-    for _ in range(60):
+    log("waiting for PKM API...")
+    for i in range(60):
         try:
             request("GET", "/health", timeout=5)
             return
         except Exception as exc:
             last = str(exc)
+            if i in (9, 19, 29, 39, 49):
+                log("still waiting for PKM API (%ss)" % (i + 1))
             time.sleep(1)
     raise RuntimeError("PKM API not healthy: %s" % last)
 
@@ -155,16 +169,18 @@ wait_health()
 token = login()
 errors = []
 for path in ENDPOINTS:
+    log("reindex %s ..." % path)
     try:
         result = request("POST", path, token=token)
-        summary = {key: result.get(key) for key in ("indexed", "created", "updated", "removed", "moved") if key in result}
-        print("%s %s" % (path, json.dumps(summary, sort_keys=True) if summary else "ok"))
+        keys = ("indexed", "created", "updated", "unchanged", "removed", "moved", "text_indexed")
+        summary = {key: result.get(key) for key in keys if key in result}
+        log("%s %s" % (path, json.dumps(summary, sort_keys=True) if summary else "ok"))
     except Exception as exc:
         errors.append("%s: %s" % (path, exc))
-        print("WARN %s" % errors[-1])
+        log("WARN %s" % errors[-1])
 if errors:
     raise SystemExit("PKM disk reindex incomplete (%s)" % "; ".join(errors))
-print("PKM disk reindex completed.")
+log("PKM disk reindex completed.")
 '@
 
 $pyB64 = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($py))
@@ -174,20 +190,17 @@ function Invoke-PkmPython {
   param([string]$Binary)
   $prevInner = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  $output = & docker exec $container $Binary -c $runner 2>&1
+  & docker exec -e PYTHONUNBUFFERED=1 $container $Binary -c $runner
   $code = $LASTEXITCODE
   $ErrorActionPreference = $prevInner
-  return @{ Code = $code; Output = $output }
+  return $code
 }
 
-$result = Invoke-PkmPython -Binary "python"
-if ($result.Code -eq 127 -or $result.Code -eq 126) {
-  $result = Invoke-PkmPython -Binary "python3"
+$code = Invoke-PkmPython -Binary "python"
+if ($code -eq 127 -or $code -eq 126) {
+  $code = Invoke-PkmPython -Binary "python3"
 }
 
-if ($result.Output) {
-  Write-Host ($result.Output | Out-String).TrimEnd()
-}
-if ($result.Code -ne 0) {
-  throw ("PKM disk reindex failed (exit {0})." -f $result.Code)
+if ($code -ne 0) {
+  throw ("PKM disk reindex failed (exit {0})." -f $code)
 }

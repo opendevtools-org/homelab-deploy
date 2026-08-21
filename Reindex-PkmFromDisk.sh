@@ -4,11 +4,24 @@
 #
 # Usage:
 #   ./Reindex-PkmFromDisk.sh
+#   ./Reindex-PkmFromDisk.sh --skip-restart
 set -euo pipefail
 
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONTAINER="${HOMELAB_PKM_CONTAINER:-pkm-backend}"
 FLAG="${HOMELAB_PKM_REINDEX_AFTER_SYNC:-true}"
+SKIP_RESTART=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --skip-restart) SKIP_RESTART=1; shift ;;
+    -h|--help)
+      echo "Usage: $0 [--skip-restart]"
+      exit 0
+      ;;
+    *) echo "Unknown option: $1" >&2; exit 1 ;;
+  esac
+done
 
 export_env_file() {
   local env_file="$1"
@@ -54,8 +67,12 @@ fi
 
 RUNNING="$(docker inspect -f '{{.State.Running}}' "$CONTAINER" 2>/dev/null || true)"
 if [[ "$RUNNING" == "true" ]]; then
-  docker restart "$CONTAINER" >/dev/null || fail "Failed to restart container '${CONTAINER}'."
-  echo "Restarted ${CONTAINER} so SQLite reopens after git sync."
+  if [[ "$SKIP_RESTART" -eq 1 ]]; then
+    echo "Using running ${CONTAINER}."
+  else
+    docker restart "$CONTAINER" >/dev/null || fail "Failed to restart container '${CONTAINER}'."
+    echo "Restarted ${CONTAINER} so SQLite reopens after git sync."
+  fi
 else
   docker start "$CONTAINER" >/dev/null || fail "Failed to start container '${CONTAINER}'."
   echo "Started ${CONTAINER}."
@@ -73,6 +90,10 @@ ENDPOINTS = (
     "/system/reindex-pdfs",
     "/system/reindex-bookmarks",
 )
+
+
+def log(msg):
+    print(msg, flush=True)
 
 
 def request(method, path, data=None, token=None, timeout=300, content_type=None, raw=None):
@@ -97,12 +118,15 @@ def request(method, path, data=None, token=None, timeout=300, content_type=None,
 
 def wait_health():
     last = "timeout"
-    for _ in range(60):
+    log("waiting for PKM API...")
+    for i in range(60):
         try:
             request("GET", "/health", timeout=5)
             return
         except Exception as exc:
             last = str(exc)
+            if i in (9, 19, 29, 39, 49):
+                log("still waiting for PKM API (%ss)" % (i + 1))
             time.sleep(1)
     raise RuntimeError("PKM API not healthy: %s" % last)
 
@@ -130,16 +154,18 @@ wait_health()
 token = login()
 errors = []
 for path in ENDPOINTS:
+    log("reindex %s ..." % path)
     try:
         result = request("POST", path, token=token)
-        summary = {key: result.get(key) for key in ("indexed", "created", "updated", "removed", "moved") if key in result}
-        print("%s %s" % (path, json.dumps(summary, sort_keys=True) if summary else "ok"))
+        keys = ("indexed", "created", "updated", "unchanged", "removed", "moved", "text_indexed")
+        summary = {key: result.get(key) for key in keys if key in result}
+        log("%s %s" % (path, json.dumps(summary, sort_keys=True) if summary else "ok"))
     except Exception as exc:
         errors.append("%s: %s" % (path, exc))
-        print("WARN %s" % errors[-1])
+        log("WARN %s" % errors[-1])
 if errors:
     raise SystemExit("PKM disk reindex incomplete (%s)" % "; ".join(errors))
-print("PKM disk reindex completed.")
+log("PKM disk reindex completed.")
 PY
 )
 
@@ -160,17 +186,16 @@ RUNNER="import base64; exec(base64.b64decode('${PY_B64}').decode())"
 
 run_in_container() {
   local bin="$1"
-  docker exec "$CONTAINER" "$bin" -c "$RUNNER"
+  docker exec -e PYTHONUNBUFFERED=1 "$CONTAINER" "$bin" -c "$RUNNER"
 }
 
 set +e
-OUT="$(run_in_container python 2>&1)"
+run_in_container python
 CODE=$?
 if [[ "$CODE" -eq 127 || "$CODE" -eq 126 ]]; then
-  OUT="$(run_in_container python3 2>&1)"
+  run_in_container python3
   CODE=$?
 fi
 set -e
 
-printf '%s\n' "$OUT"
 [[ "$CODE" -eq 0 ]] || fail "PKM disk reindex failed (exit ${CODE})."

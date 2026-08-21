@@ -22,7 +22,7 @@
 
 .PARAMETER Start
   docker compose pull && up -d after updating the submodule, then import
-  PKM pages/files/PDFs/bookmarks from disk (same as Reindex-PkmFromDisk).
+  PKM pages/files/PDFs/bookmarks from disk without restarting PKM again.
 
 .EXAMPLE
   cd C:\Projects\homelab-deploy
@@ -218,11 +218,9 @@ if ($Start) {
     Write-Host "Importing PKM pages, files, PDFs, and bookmarks from disk..."
     $shell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     $ErrorActionPreference = "Continue"
-    $output = & $shell -NoProfile -ExecutionPolicy Bypass -File $helper 2>&1
+    & $shell -NoProfile -ExecutionPolicy Bypass -File $helper -SkipRestart
     $reindexCode = $LASTEXITCODE
     $ErrorActionPreference = $prev
-    $text = ($output | Out-String).Trim()
-    if ($text) { Write-Host $text }
     if ($reindexCode -ne 0) {
       Write-Warning "PKM disk reindex failed after Compose up. Use Import from disk in the PKM UI if items are missing."
     }

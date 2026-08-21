@@ -153,7 +153,7 @@ if [[ "$START" -eq 1 ]]; then
     echo "Importing PKM pages, files, PDFs, and bookmarks from disk..."
     chmod +x "$helper" 2>/dev/null || true
     set +e
-    /bin/bash "$helper"
+    /bin/bash "$helper" --skip-restart
     reindex_code=$?
     set -e
     if [[ "$reindex_code" -ne 0 ]]; then
