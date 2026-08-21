@@ -190,17 +190,18 @@ function Invoke-PkmPython {
   param([string]$Binary)
   $prevInner = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
+  # Do not assign/return docker stdout: PowerShell would treat log lines as the exit code.
   & docker exec -e PYTHONUNBUFFERED=1 $container $Binary -c $runner
-  $code = $LASTEXITCODE
+  $script:PkmPythonExit = $LASTEXITCODE
   $ErrorActionPreference = $prevInner
-  return $code
 }
 
-$code = Invoke-PkmPython -Binary "python"
-if ($code -eq 127 -or $code -eq 126) {
-  $code = Invoke-PkmPython -Binary "python3"
+$script:PkmPythonExit = 1
+Invoke-PkmPython -Binary "python"
+if ($script:PkmPythonExit -eq 127 -or $script:PkmPythonExit -eq 126) {
+  Invoke-PkmPython -Binary "python3"
 }
 
-if ($code -ne 0) {
-  throw ("PKM disk reindex failed (exit {0})." -f $code)
+if ($script:PkmPythonExit -ne 0) {
+  throw ("PKM disk reindex failed (exit {0})." -f $script:PkmPythonExit)
 }
