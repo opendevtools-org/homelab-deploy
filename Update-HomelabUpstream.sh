@@ -102,12 +102,23 @@ if [[ "$COMMIT" -eq 1 ]]; then
 fi
 
 if [[ "$PUSH" -eq 1 ]]; then
-  git push
+  branch="$(git rev-parse --abbrev-ref HEAD)"
+  [[ -n "$branch" && "$branch" != "HEAD" ]] || { echo "Detached HEAD is not supported for --push." >&2; exit 1; }
+  git fetch origin
+  if ! git pull --rebase --autostash origin "$branch"; then
+    git rebase --abort >/dev/null 2>&1 || true
+    git merge --no-edit "origin/$branch"
+  fi
+  git push origin "$branch"
   echo "Pushed."
 fi
 
 if [[ "$START" -eq 1 ]]; then
   [[ -f .env ]] || { echo "Missing .env in site root" >&2; exit 1; }
+  echo "Starting Compose (stop old containers if names conflict)..."
+  for n in pkm-backend pkm-frontend home-hub home-hub-platform; do
+    docker rm -f "$n" >/dev/null 2>&1 || true
+  done
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \

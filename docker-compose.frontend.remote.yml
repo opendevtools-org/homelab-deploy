@@ -1,0 +1,22 @@
+# Device overlay — web clients without the backend on this machine.
+# homelab_default does not exist here; nginx talks to the server via .env.
+#
+#   HUB_API_UPSTREAM=http://SERVER:8090
+#   PKM_API_UPSTREAM=http://SERVER:8001
+#   docker compose -f docker-compose.frontend.yml \
+#     -f docker-compose.frontend.remote.yml \
+#     -f docker-compose.frontend.lan.yml up -d
+
+networks:
+  default:
+    name: homelab-frontend
+    external: false
+
+services:
+  hub:
+    environment:
+      HUB_API_UPSTREAM: ${HUB_API_UPSTREAM:?set HUB_API_UPSTREAM in .env (http://SERVER:8090)}
+
+  pkm-frontend:
+    environment:
+      PKM_API_UPSTREAM: ${PKM_API_UPSTREAM:?set PKM_API_UPSTREAM in .env (http://SERVER:8001)}

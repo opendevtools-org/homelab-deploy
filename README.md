@@ -13,8 +13,9 @@ Needs Docker Compose v2 and access to `ghcr.io`.
 | | `docker-compose.lan.yml` or `.local.yml` | server | API host ports (pick one) |
 | | `docker-compose.config.yml` | server | one-time PKM data ownership |
 | | `docker-compose.apps.yml` | server | extra **backends** (Market plugins) |
-| `homelab-frontend` | `docker-compose.frontend.yml` | device or same host | Hub UI + PKM UI |
-| | `docker-compose.frontend.lan.yml` or `.frontend.local.yml` | device or same host | UI host ports |
+| `homelab-frontend` | `docker-compose.frontend.yml` | same host as APIs | Hub UI + PKM UI (joins `homelab_default`) |
+| | `docker-compose.frontend.lan.yml` or `.frontend.local.yml` | same host or device | UI host ports |
+| | `docker-compose.frontend.remote.yml` | device only | proxy to a remote server |
 
 Run them with **separate** `docker compose` commands. Do not combine backend and frontend `-f` files into one `up`.
 
@@ -39,15 +40,22 @@ Localhost: swap `lan` for `local`. Do not combine both. `docker-compose.yml` is 
 | Hub API | http://SERVER:8090 |
 | PKM API | http://SERVER:8001 |
 
-## Flat install — web clients (devices)
+## Flat install — web clients (same host)
 
-On each device, set the server URLs in `.env`. On the **same host** as the APIs, the defaults (`host.docker.internal`) are enough:
+Start the backend first (it creates `homelab_default`). Nginx proxies to `hub-platform` and `pkm-backend` on that network — no extra overlay and no `host.docker.internal`.
 
 ```bash
-# Device only — point at the server:
+docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
+```
+
+## Flat install — web clients (other devices)
+
+On a machine that does **not** run the APIs, set the server URLs and add the remote overlay:
+
+```bash
 # HUB_API_UPSTREAM=http://SERVER:8090
 # PKM_API_UPSTREAM=http://SERVER:8001
-docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
+docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.remote.yml -f docker-compose.frontend.lan.yml up -d
 ```
 
 | | |
@@ -156,7 +164,7 @@ No flags: only `git pull` in `upstream/`.
 |------|---------|--------|
 | *(none)* | — | Pull in `upstream/` only. |
 | `--commit` / `-Commit` | off | Commit submodule pointer. |
-| `--push` / `-Push` | off | Push (implies commit). |
+| `--push` / `-Push` | off | Rebase onto origin, then push (implies commit). |
 | `--start` / `-Start` | off | Compose pull + up (includes apps). |
 | `--ports` / `-Ports` | `lan` | Ports overlay with start. |
 

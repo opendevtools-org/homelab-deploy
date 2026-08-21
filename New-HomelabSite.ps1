@@ -180,6 +180,7 @@ if (-not $alreadySite) {
     "docker-compose.local.yml",
     "docker-compose.frontend.lan.yml",
     "docker-compose.frontend.local.yml",
+    "docker-compose.frontend.remote.yml",
     "docker-compose.apps.example.yml",
     "LICENSE",
     "README.md",

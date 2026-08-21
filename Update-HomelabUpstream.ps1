@@ -17,7 +17,7 @@
   git add upstream + commit on the site repo.
 
 .PARAMETER Push
-  git push after commit (implies -Commit).
+  git push after integrating origin (rebase, then merge fallback). Implies commit.
 
 .PARAMETER Start
   docker compose pull && up -d after updating the submodule.
@@ -137,7 +137,25 @@ if ($Commit) {
 }
 
 if ($Push) {
-  Invoke-Git push | Out-Null
+  $branch = (Invoke-Git rev-parse --abbrev-ref HEAD | Select-Object -Last 1).ToString().Trim()
+  if ([string]::IsNullOrWhiteSpace($branch) -or $branch -eq "HEAD") {
+    throw "Detached HEAD is not supported for -Push."
+  }
+  Invoke-Git fetch origin | Out-Null
+  try {
+    Invoke-Git pull --rebase --autostash origin $branch | Out-Null
+  } catch {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & git rebase --abort 2>&1 | Out-Null
+    $ErrorActionPreference = $prev
+    try {
+      Invoke-Git merge --no-edit ("origin/{0}" -f $branch) | Out-Null
+    } catch {
+      throw ("Could not integrate origin/{0} (rebase and merge failed). Resolve conflicts, then git push and re-run with -Start." -f $branch)
+    }
+  }
+  Invoke-Git push origin $branch | Out-Null
   Write-Host "Pushed."
 }
 
@@ -145,8 +163,12 @@ if ($Start) {
   if (-not (Test-Path (Join-Path $siteRoot ".env"))) {
     throw "Missing .env in site root."
   }
+  Write-Host "Starting Compose (stop old containers if names conflict)..."
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
+  foreach ($n in @("pkm-backend", "pkm-frontend", "home-hub", "home-hub-platform")) {
+    & docker rm -f $n 2>&1 | Out-Null
+  }
   & docker compose --project-directory . `
     -f upstream/docker-compose.backend.yml `
     -f ("upstream/{0}" -f $portsFile) `

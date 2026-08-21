@@ -104,6 +104,7 @@ if [[ "$already_site" -eq 0 ]]; then
     docker-compose.yml docker-compose.backend.yml docker-compose.frontend.yml \
     docker-compose.lan.yml docker-compose.local.yml \
     docker-compose.frontend.lan.yml docker-compose.frontend.local.yml \
+    docker-compose.frontend.remote.yml \
     docker-compose.apps.yml docker-compose.apps.example.yml \
     LICENSE README.md \
     New-HomelabSite.ps1 New-HomelabSite.sh \

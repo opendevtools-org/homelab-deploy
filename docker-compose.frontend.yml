@@ -1,11 +1,17 @@
 # Web clients — Compose project homelab-frontend (same split as a local homelab).
 # Do not combine this file with docker-compose.backend.yml in one `up`.
 #
-# Same host (after backend is up; APIs published on 8090 / 8001):
+# Same host (after backend is up; joins homelab_default, proxies via Docker DNS):
 #   docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
-# Device: set HUB_API_UPSTREAM and PKM_API_UPSTREAM in .env to the server.
+# Device (no backend on this machine):
+#   set HUB_API_UPSTREAM / PKM_API_UPSTREAM in .env, then add docker-compose.frontend.remote.yml.
 
 name: homelab-frontend
+
+networks:
+  default:
+    name: homelab_default
+    external: true
 
 services:
   hub:
@@ -14,7 +20,7 @@ services:
     container_name: home-hub
     restart: unless-stopped
     environment:
-      HUB_API_UPSTREAM: ${HUB_API_UPSTREAM:-http://host.docker.internal:8090}
+      HUB_API_UPSTREAM: http://hub-platform:8090
       NGINX_ENVSUBST_FILTER: ^HUB_API_UPSTREAM$
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -25,7 +31,7 @@ services:
     container_name: pkm-frontend
     restart: unless-stopped
     environment:
-      PKM_API_UPSTREAM: ${PKM_API_UPSTREAM:-http://host.docker.internal:8001}
+      PKM_API_UPSTREAM: http://pkm-backend:8000
       NGINX_ENVSUBST_FILTER: ^PKM_API_UPSTREAM$
     extra_hosts:
       - "host.docker.internal:host-gateway"
