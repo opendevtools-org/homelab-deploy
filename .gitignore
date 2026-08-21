@@ -11,5 +11,4 @@ tmp-*
 upstream/data/
 logs/
 data/pkm/scripts/**/.uploads/
-cli/docker/resources/docker-env/temp-docker-compose-*
 *.local-conflict.*
