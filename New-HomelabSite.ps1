@@ -8,6 +8,7 @@
     ./upstream/                 # git submodule → opendevtools-org/homelab-deploy
     ./data/                     # your volumes (kept)
     ./.env                      # your secrets (kept, never committed)
+    ./docker-compose.config.yml # one-time PKM data ownership
     ./docker-compose.apps.yml   # your apps overlay
     ./.gitignore
     ./README.md
@@ -111,13 +112,16 @@ $scriptRoot = $PSScriptRoot
 if (-not $TargetDir) { $TargetDir = $scriptRoot }
 $TargetDir = [System.IO.Path]::GetFullPath($TargetDir)
 $portsFile = if ($Ports -eq "local") { "docker-compose.local.yml" } else { "docker-compose.lan.yml" }
+$frontendPortsFile = if ($Ports -eq "local") { "docker-compose.frontend.local.yml" } else { "docker-compose.frontend.lan.yml" }
 
 if (-not (Test-Path $TargetDir)) {
   throw ("TargetDir not found: {0}" -f $TargetDir)
 }
 
-$alreadySite = Test-Path (Join-Path $TargetDir "upstream\docker-compose.yml")
-$isFlat = Test-Path (Join-Path $TargetDir "docker-compose.yml")
+$alreadySite = (Test-Path (Join-Path $TargetDir "upstream\docker-compose.yml")) -or
+  (Test-Path (Join-Path $TargetDir "upstream\docker-compose.backend.yml"))
+$isFlat = (Test-Path (Join-Path $TargetDir "docker-compose.yml")) -or
+  (Test-Path (Join-Path $TargetDir "docker-compose.backend.yml"))
 if (-not $alreadySite -and -not $isFlat) {
   throw "TargetDir is neither a flat homelab-deploy install nor an existing site (missing docker-compose.yml and upstream/)."
 }
@@ -186,7 +190,12 @@ if (-not $alreadySite) {
     "Backup-DataGit.ps1",
     "Backup-DataGit.sh",
     "Register-DataGitBackupTask.ps1",
-    "Register-DataGitBackup.sh"
+    "Register-DataGitBackup.sh",
+    "Pull-DataGit.ps1",
+    "Pull-DataGit.sh",
+    "Register-DataGitPullTask.ps1",
+    "Register-DataGitPull.sh",
+    "docker-compose.config.yml"
   )
   foreach ($f in $productFiles) {
     $p = Join-Path $TargetDir $f
@@ -313,6 +322,8 @@ Write-Utf8NoBom (Join-Path $TargetDir ".gitignore") @"
 *.tar
 logs/
 upstream/data/
+**/__pycache__/
+data/pkm/scripts/**/.uploads/
 "@
 
 $readme = @"
@@ -322,19 +333,25 @@ Converted from a flat ``homelab-deploy`` install.
 
 - ``upstream/`` — git submodule ($UpstreamUrl) — product package
 - ``data/`` — your Hub + PKM volumes
+- ``docker-compose.config.yml`` — one-time PKM data ownership
 - ``docker-compose.apps.yml`` — your extra services
 - ``.env`` — secrets (not committed)
 - ``Update-HomelabUpstream.ps1`` / ``.sh`` — pull product updates
-- ``Backup-DataGit.ps1`` / ``.sh`` — daily commit/push of ``data/``
-- ``Register-DataGitBackupTask.ps1`` / ``Register-DataGitBackup.sh`` — schedule that backup
+- ``Backup-DataGit.ps1`` / ``.sh`` — primary server: commit/push site data
+- ``Pull-DataGit.ps1`` / ``.sh`` — standby server: sync from origin
+- ``Register-DataGitBackup*`` / ``Register-DataGitPull*`` — daily schedules
 
 ## Start
 
 ``````bash
 docker compose --project-directory . \\
-  -f upstream/docker-compose.yml \\
+  -f upstream/docker-compose.backend.yml \\
   -f upstream/$portsFile \\
+  -f docker-compose.config.yml \\
   -f docker-compose.apps.yml up -d
+docker compose --project-directory . \\
+  -f upstream/docker-compose.frontend.yml \\
+  -f upstream/$frontendPortsFile up -d
 ``````
 
 ## Update product
@@ -344,18 +361,29 @@ docker compose --project-directory . \\
 # Windows: .\\Update-HomelabUpstream.ps1 -Commit -Push -Start
 ``````
 
-## Daily data backup
+## Git sync
 
-Commits and pushes only ``data/``. If origin advanced, tries rebase then merge; real conflicts need manual fix.
+Optional HTTPS auth in ``.env`` (not committed): ``HOMELAB_GIT_USERNAME`` and ``HOMELAB_GIT_PAT``.
+
+Two servers with the same data:
+
+- primary: ``Backup-DataGit`` (default 00:05)
+- standby: ``Pull-DataGit`` (default 00:10)
+
+If the same file changed on both sides, the remote copy stays canonical and the local copy is saved as ``name.local-conflict.HOST.TIMESTAMP.ext``.
 
 ``````powershell
 .\Register-DataGitBackupTask.ps1 -Time 00:05
 .\Backup-DataGit.ps1
+.\Register-DataGitPullTask.ps1 -Time 00:10
+.\Pull-DataGit.ps1
 ``````
 
 ``````bash
 ./Register-DataGitBackup.sh --time 00:05
 ./Backup-DataGit.sh
+./Register-DataGitPull.sh --time 00:10
+./Pull-DataGit.sh
 ``````
 "@
 Write-Utf8NoBom (Join-Path $TargetDir "README.md") $readme
@@ -367,7 +395,12 @@ foreach ($name in @(
   "Backup-DataGit.ps1",
   "Backup-DataGit.sh",
   "Register-DataGitBackupTask.ps1",
-  "Register-DataGitBackup.sh"
+  "Register-DataGitBackup.sh",
+  "Pull-DataGit.ps1",
+  "Pull-DataGit.sh",
+  "Register-DataGitPullTask.ps1",
+  "Register-DataGitPull.sh",
+  "docker-compose.config.yml"
 )) {
   $src = Join-Path $TargetDir ("upstream\{0}" -f $name)
   if (Test-Path $src) {
@@ -428,26 +461,47 @@ if ($Start) {
     throw "Missing .env"
   }
   # Stop old flat project containers if names conflict
-  Write-Host "Starting Compose (stop conflicting old containers if any)..."
+  Write-Host "Starting Compose (backend then frontend)..."
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   foreach ($n in @("pkm-backend", "pkm-frontend", "home-hub", "home-hub-platform")) {
     & docker rm -f $n 2>&1 | Out-Null
   }
   & docker compose --project-directory . `
-    -f upstream/docker-compose.yml `
+    -f upstream/docker-compose.backend.yml `
     -f ("upstream/{0}" -f $portsFile) `
+    -f docker-compose.config.yml `
     -f docker-compose.apps.yml `
     pull
   if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = $prev; throw "docker compose pull failed" }
   & docker compose --project-directory . `
-    -f upstream/docker-compose.yml `
+    -f upstream/docker-compose.backend.yml `
     -f ("upstream/{0}" -f $portsFile) `
+    -f docker-compose.config.yml `
     -f docker-compose.apps.yml `
     up -d
   $code = $LASTEXITCODE
   $ErrorActionPreference = $prev
   if ($code -ne 0) { throw "docker compose up failed" }
+  $ErrorActionPreference = "Continue"
+  & docker compose --project-directory . `
+    -f upstream/docker-compose.backend.yml `
+    -f ("upstream/{0}" -f $portsFile) `
+    -f docker-compose.config.yml `
+    -f docker-compose.apps.yml `
+    rm --force --stop pkm-data-permissions 2>&1 | Out-Null
+  & docker compose --project-directory . `
+    -f upstream/docker-compose.frontend.yml `
+    -f ("upstream/{0}" -f $frontendPortsFile) `
+    pull
+  if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = $prev; throw "docker compose frontend pull failed" }
+  & docker compose --project-directory . `
+    -f upstream/docker-compose.frontend.yml `
+    -f ("upstream/{0}" -f $frontendPortsFile) `
+    up -d
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+  if ($code -ne 0) { throw "docker compose frontend up failed" }
 }
 
 Write-Host ""
@@ -455,4 +509,5 @@ Write-Host "Done. Flat install converted in place:"
 Write-Host ("  {0}" -f $TargetDir)
 Write-Host "  upstream/  = product submodule (git pull inside to update)"
 Write-Host "  data/      = your volumes"
-Write-Host ("  Start     : cd `"{0}`"; docker compose --project-directory . -f upstream/docker-compose.yml -f upstream/{1} -f docker-compose.apps.yml up -d" -f $TargetDir, $portsFile)
+Write-Host ("  Backend   : docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/{0} -f docker-compose.config.yml -f docker-compose.apps.yml up -d" -f $portsFile)
+Write-Host ("  Frontend  : docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/{0} up -d" -f $frontendPortsFile)

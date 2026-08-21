@@ -1,10 +1,21 @@
 #!/usr/bin/env bash
-# Commits and pushes changes under data/ plus selected site files as a daily backup.
-# Same behaviour as Backup-DataGit.ps1. For site instances only.
+# Pulls the latest site data from origin and safely publishes local standby changes.
+# Same role as Pull-DataGit.ps1. For site instances only.
 #
-# Usage (from site root):
-#   ./Backup-DataGit.sh
+# Usage (from standby site root):
+#   ./Pull-DataGit.sh
 set -euo pipefail
+
+NOTIFY_WEBHOOK_URL="${HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL:-}"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+NOTIFICATION_LOG="${HOMELAB_PULL_LOG:-$SCRIPT_ROOT/logs/pull-data-git.log}"
+BACKUP_PATHS=(data docker-compose.apps.yml README.md)
+EXCLUDE_PATHSPEC=':(exclude)data/pkm/scripts/**/.uploads/**'
+GIT_AUTH_ARGS=()
+HOST_ID="$(hostname 2>/dev/null || printf 'unknown-host')"
+HOST_ID="${HOST_ID//[^A-Za-z0-9._-]/-}"
+[[ -n "$HOST_ID" ]] || HOST_ID="unknown-host"
+CONFLICT_TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
 
 export_env_file() {
   local env_file="$1"
@@ -14,16 +25,6 @@ export_env_file() {
   source "$env_file"
   set +a
 }
-
-NOTIFY_WEBHOOK_URL="${HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL:-}"
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-NOTIFICATION_LOG="${HOMELAB_BACKUP_LOG:-$SCRIPT_ROOT/logs/backup-data-git.log}"
-BACKUP_PATHS=(data docker-compose.apps.yml README.md)
-GIT_AUTH_ARGS=()
-HOST_ID="$(hostname 2>/dev/null || printf 'unknown-host')"
-HOST_ID="${HOST_ID//[^A-Za-z0-9._-]/-}"
-[[ -n "$HOST_ID" ]] || HOST_ID="unknown-host"
-CONFLICT_TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
 
 notify() {
   local level="$1"
@@ -55,8 +56,8 @@ PY
 }
 
 die() {
-  notify "ERROR" "Backup failed: $1"
-  echo "Backup failed: $1" >&2
+  notify "ERROR" "Pull failed: $1"
+  echo "Pull failed: $1" >&2
   exit 1
 }
 
@@ -156,11 +157,30 @@ resolve_conflicts_with_remote() {
   git_auth commit --no-edit
 }
 
+commit_local_changes() {
+  git add -A -- "${BACKUP_PATHS[@]}" "$EXCLUDE_PATHSPEC"
+
+  if [[ -z "$(git diff --cached --name-only -- "${BACKUP_PATHS[@]}" "$EXCLUDE_PATHSPEC")" ]]; then
+    return 0
+  fi
+
+  git commit -m "backup(site): $(date '+%Y-%m-%d %H:%M:%S')"
+}
+
+sync_with_origin() {
+  if ! git_auth pull --rebase --autostash origin "$BRANCH"; then
+    git_auth rebase --abort 2>/dev/null || true
+    if ! git_auth merge --no-edit "origin/$BRANCH"; then
+      resolve_conflicts_with_remote
+    fi
+  fi
+}
+
 command -v git >/dev/null 2>&1 || die "git is required"
 
 REPO_ROOT="$SCRIPT_ROOT"
-[[ -d "$REPO_ROOT/.git" ]] || die "Run this script from the site instance root (folder with .git and data/)."
-[[ -d "$REPO_ROOT/data" ]] || die "Missing data/ under site root. This backup is for site instances only."
+[[ -d "$REPO_ROOT/.git" ]] || die "Run this script from the standby site root (folder with .git and data/)."
+[[ -d "$REPO_ROOT/data" ]] || die "Missing data/ under site root. This pull is for standby site instances only."
 
 export_env_file "$REPO_ROOT/.env"
 
@@ -168,28 +188,11 @@ cd "$REPO_ROOT"
 build_git_auth_args
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
-[[ -n "$BRANCH" && "$BRANCH" != "HEAD" ]] || die "Detached HEAD is not supported for automatic backup pushes."
+[[ -n "$BRANCH" && "$BRANCH" != "HEAD" ]] || die "Detached HEAD is not supported for automatic pulls."
 
-git add -u -- "${BACKUP_PATHS[@]}"
-mapfile -d '' NEW_BACKUP_FILES < <(git ls-files -z -o --exclude-standard -- "${BACKUP_PATHS[@]}")
-if (( ${#NEW_BACKUP_FILES[@]} > 0 )); then
-  git add -- "${NEW_BACKUP_FILES[@]}"
-fi
+commit_local_changes
+sync_with_origin
+git_auth push origin "$BRANCH" || die "git push origin $BRANCH failed. Run the script again after checking the network/remote status."
+git submodule update --init --recursive || die "git submodule update failed."
 
-if [[ -n "$(git diff --cached --name-only -- "${BACKUP_PATHS[@]}")" ]]; then
-  TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
-  git commit -m "backup(site): ${TIMESTAMP}"
-else
-  notify "INFO" "No changes in backup paths (data/, docker-compose.apps.yml, README.md). Continuing with remote sync."
-fi
-
-if ! git_auth pull --rebase --autostash origin "$BRANCH"; then
-  git_auth rebase --abort 2>/dev/null || true
-  if ! git_auth merge --no-edit "origin/$BRANCH"; then
-    resolve_conflicts_with_remote
-  fi
-fi
-
-git_auth push origin "$BRANCH"
-
-notify "INFO" "Backup/sync of data/, docker-compose.apps.yml, and README.md completed on branch '${BRANCH}'."
+notify "INFO" "Pull/sync completed with origin/${BRANCH}."

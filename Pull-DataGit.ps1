@@ -1,25 +1,25 @@
 <#
 .SYNOPSIS
-  Commits and pushes data/ plus selected site files as a daily backup.
+  Pulls the latest site data from origin and safely publishes local standby changes.
 
 .DESCRIPTION
-  For site instances (data/ is versioned). Stages data/, README.md, and
-  docker-compose.apps.yml, creates a timestamped commit if needed, syncs
-  with origin (rebase then merge fallback), then pushes the current branch.
+  For backup/standby site instances. Commits local site data changes if needed,
+  syncs with origin, archives local conflict copies when the same file changed
+  on both servers, pushes the synchronized branch, then updates submodules.
 
 .EXAMPLE
-  .\Backup-DataGit.ps1
+  .\Pull-DataGit.ps1
 #>
 [CmdletBinding()]
 param(
   [string]$NotifyWebhookUrl = $env:HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL,
-  [string]$NotificationLog = (Join-Path $PSScriptRoot "logs\backup-data-git.log")
+  [string]$NotificationLog
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $backupPaths = @("data", "docker-compose.apps.yml", "README.md")
-$excludePathspec = ":(exclude)data/pkm/scripts/generateReadme/.uploads/**"
+$excludePathspec = ":(exclude)data/pkm/scripts/**/.uploads/**"
 $script:gitExtraArgs = @()
 $script:hostId = ([System.Net.Dns]::GetHostName() -replace '[^A-Za-z0-9._-]', '-')
 if ([string]::IsNullOrWhiteSpace($script:hostId)) { $script:hostId = "unknown-host" }
@@ -173,6 +173,48 @@ function Resolve-GitConflictsWithRemote {
   Invoke-Git commit --no-edit | Out-Null
 }
 
+function Commit-LocalChanges {
+  $backupPathspecs = @($backupPaths + $excludePathspec)
+  $addArgs = @("add", "-A", "--") + $backupPathspecs
+  Invoke-Git @addArgs | Out-Null
+
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $diffArgs = @("diff", "--cached", "--name-only", "--") + $backupPathspecs
+  $staged = & git @diffArgs 2>&1
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+  if ($code -ne 0) {
+    throw ("git diff --cached failed: {0}" -f (($staged | Out-String).Trim()))
+  }
+
+  if (-not $staged) {
+    return
+  }
+
+  $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+  Invoke-Git commit -m "backup(site): $timestamp" | Out-Null
+}
+
+function Sync-WithOrigin {
+  param([string]$Branch)
+
+  try {
+    Invoke-Git pull --rebase --autostash origin $Branch | Out-Null
+  } catch {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & git rebase --abort 2>&1 | Out-Null
+    $ErrorActionPreference = $prev
+
+    try {
+      Invoke-Git merge --no-edit ("origin/{0}" -f $Branch) | Out-Null
+    } catch {
+      Resolve-GitConflictsWithRemote
+    }
+  }
+}
+
 function Send-Notification {
   param(
     [ValidateSet("INFO", "ERROR")]
@@ -195,7 +237,7 @@ function Send-Notification {
 
   if ($Level -eq "ERROR") {
     try {
-      & eventcreate /T ERROR /ID 1000 /L APPLICATION /SO "HomelabDataGitBackup" /D $Message | Out-Null
+      & eventcreate /T ERROR /ID 1000 /L APPLICATION /SO "HomelabDataGitPull" /D $Message | Out-Null
     } catch {
       Write-Warning ("Cannot write Windows Event Log notification: {0}" -f $_.Exception.Message)
     }
@@ -212,73 +254,37 @@ function Send-Notification {
 }
 
 $repoRoot = $PSScriptRoot
+if ([string]::IsNullOrWhiteSpace($NotificationLog)) {
+  $NotificationLog = Join-Path $repoRoot "logs\pull-data-git.log"
+}
 if (-not (Test-Path (Join-Path $repoRoot ".git"))) {
-  throw "Run this script from the site instance root (folder with .git and data/)."
+  throw "Run this script from the standby site root (folder with .git and data/)."
 }
 if (-not (Test-Path (Join-Path $repoRoot "data"))) {
-  throw "Missing data/ under site root. This backup is for site instances only."
+  throw "Missing data/ under site root. This pull is for standby site instances only."
 }
 
-Import-DotEnv -Path (Join-Path $repoRoot ".env")
-
 Set-Location $repoRoot
+Import-DotEnv -Path (Join-Path $repoRoot ".env")
 Initialize-GitAuth
 
 try {
   $branch = (Invoke-Git rev-parse --abbrev-ref HEAD | Select-Object -Last 1).ToString().Trim()
   if ([string]::IsNullOrWhiteSpace($branch) -or $branch -eq "HEAD") {
-    throw "Detached HEAD is not supported for automatic backup pushes."
+    throw "Detached HEAD is not supported for automatic pulls."
   }
 
-  $backupPathspecs = @($backupPaths + $excludePathspec)
-  $addArgs = @("add", "-A", "--") + $backupPathspecs
-  Invoke-Git @addArgs | Out-Null
-
-  $prev = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  $diffArgs = @("diff", "--cached", "--name-only", "--") + $backupPathspecs
-  $staged = & git @diffArgs 2>&1
-  $code = $LASTEXITCODE
-  $ErrorActionPreference = $prev
-  if ($code -ne 0) {
-    throw ("git diff --cached failed: {0}" -f (($staged | Out-String).Trim()))
-  }
-
-  if ($staged) {
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $message = "backup(site): $timestamp"
-    Invoke-Git commit -m $message | Out-Null
-  } else {
-    $msg = "No changes in backup paths (data/, docker-compose.apps.yml, README.md). Continuing with remote sync."
-    Write-Host $msg
-    Send-Notification -Level "INFO" -Message $msg
-  }
-
-  try {
-    Invoke-Git pull --rebase --autostash origin $branch | Out-Null
-  } catch {
-    $rebaseError = $_.Exception.Message
-
-    $prev = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    & git rebase --abort 2>&1 | Out-Null
-    $ErrorActionPreference = $prev
-
-    try {
-      Invoke-Git merge --no-edit ("origin/{0}" -f $branch) | Out-Null
-    } catch {
-      Resolve-GitConflictsWithRemote
-    }
-  }
-
+  Commit-LocalChanges
+  Sync-WithOrigin -Branch $branch
   Invoke-Git push origin $branch | Out-Null
+  Invoke-Git submodule update --init --recursive | Out-Null
 
-  $ok = "Backup/sync of data/, docker-compose.apps.yml, and README.md completed on branch '{0}'." -f $branch
+  $ok = "Pull/sync completed with origin/{0}." -f $branch
   Write-Host $ok
   Send-Notification -Level "INFO" -Message $ok
 } catch {
-  $err = "Backup failed: {0}" -f $_.Exception.Message
-  Write-Error $err
+  $err = "Pull failed: {0}" -f $_.Exception.Message
   Send-Notification -Level "ERROR" -Message $err
+  Write-Error $err
   throw
 }

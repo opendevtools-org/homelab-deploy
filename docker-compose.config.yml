@@ -1,0 +1,31 @@
+# One-time initialization overlay (PKM data ownership).
+# Include after the base compose and network overlay, before docker-compose.apps.yml.
+#
+# Include with the backend project only (not with docker-compose.frontend.yml).
+# Flat:
+#   docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml \
+#     -f docker-compose.config.yml -f docker-compose.apps.yml up -d
+# Site:
+#   docker compose --project-directory . \
+#     -f upstream/docker-compose.backend.yml -f upstream/docker-compose.lan.yml \
+#     -f docker-compose.config.yml -f docker-compose.apps.yml up -d
+
+services:
+  pkm-data-permissions:
+    image: busybox:1.36
+    user: "0:0"
+    volumes:
+      - ./data/pkm:/data
+    command:
+      - sh
+      - -c
+      - >-
+        owner="${PUID:-1000}:${PGID:-1000}"; marker=/data/.permissions-owner;
+        if [ "$$(cat "$$marker" 2>/dev/null)" = "$$owner" ]; then exit 0; fi;
+        chown -R "$$owner" /data && printf '%s\n' "$$owner" > "$$marker"
+    restart: "no"
+
+  pkm-backend:
+    depends_on:
+      pkm-data-permissions:
+        condition: service_completed_successfully

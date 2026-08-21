@@ -11,6 +11,8 @@ set -euo pipefail
 TIME="00:05"
 UNINSTALL=0
 MARKER="# homelab-data-git-backup"
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BACKUP_SCRIPT="$SCRIPT_ROOT/Backup-DataGit.sh"
 
 usage() {
   echo "Usage: $0 [--time HH:MM] [--uninstall]"
@@ -37,15 +39,24 @@ MINUTE="${TIME##*:}"
 HOUR=$((10#$HOUR))
 MINUTE=$((10#$MINUTE))
 
-SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_SCRIPT="$SCRIPT_ROOT/Backup-DataGit.sh"
-
 [[ -f "$BACKUP_SCRIPT" ]] || { echo "Missing script: $BACKUP_SCRIPT" >&2; exit 1; }
 chmod +x "$BACKUP_SCRIPT" "$SCRIPT_ROOT/Register-DataGitBackup.sh" 2>/dev/null || true
 
-if [[ ! -d "$SCRIPT_ROOT/data" ]]; then
-  echo "Warning: no data/ folder found. Register anyway; run from a site instance root for backups to work." >&2
-fi
+[[ -d "$SCRIPT_ROOT/.git" ]] || { echo "Run this script from the site instance root (folder with .git and data/)." >&2; exit 1; }
+[[ -d "$SCRIPT_ROOT/data" ]] || { echo "Missing data/ under site root. This backup is for site instances only." >&2; exit 1; }
+
+command -v git >/dev/null 2>&1 || { echo "git is required" >&2; exit 1; }
+
+cd "$SCRIPT_ROOT"
+BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+[[ -n "$BRANCH" && "$BRANCH" != "HEAD" ]] || {
+  echo "Detached HEAD is not supported for automatic backup pushes." >&2
+  exit 1
+}
+git remote get-url origin >/dev/null 2>&1 || {
+  echo "Missing git remote 'origin'. Automatic backup push requires origin to be configured." >&2
+  exit 1
+}
 
 command -v crontab >/dev/null 2>&1 || { echo "crontab is required" >&2; exit 1; }
 
@@ -71,5 +82,7 @@ fi
 
 mkdir -p "$SCRIPT_ROOT/logs"
 echo "Cron job registered for every day at ${TIME} (${MINUTE} ${HOUR} * * *)."
+echo "Scheduled branch: ${BRANCH} (origin remote detected)."
+echo "The job runs automatic backup of data/, docker-compose.apps.yml, and README.md with commit, pull --rebase, merge fallback, and push."
 echo "Log: ${SCRIPT_ROOT}/logs/backup-data-git.cron.log"
 echo "Uninstall: $0 --uninstall"

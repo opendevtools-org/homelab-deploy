@@ -30,12 +30,13 @@ done
 
 [[ "$PORTS" == "lan" || "$PORTS" == "local" ]] || { echo "--ports must be lan or local" >&2; exit 1; }
 PORTS_FILE="docker-compose.${PORTS}.yml"
+FRONTEND_PORTS_FILE="docker-compose.frontend.${PORTS}.yml"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ "$(basename "$HERE")" == "upstream" && -f "$HERE/../docker-compose.apps.yml" ]]; then
   SITE_ROOT="$(cd "$HERE/.." && pwd)"
   UPSTREAM="$HERE"
-elif [[ -f "$HERE/upstream/docker-compose.yml" ]]; then
+elif [[ -f "$HERE/upstream/docker-compose.yml" || -f "$HERE/upstream/docker-compose.backend.yml" ]]; then
   SITE_ROOT="$HERE"
   UPSTREAM="$HERE/upstream"
 else
@@ -66,6 +67,11 @@ LAUNCHERS=(
   Backup-DataGit.ps1
   Register-DataGitBackup.sh
   Register-DataGitBackupTask.ps1
+  Pull-DataGit.sh
+  Pull-DataGit.ps1
+  Register-DataGitPull.sh
+  Register-DataGitPullTask.ps1
+  docker-compose.config.yml
 )
 REFRESHED=()
 for s in "${LAUNCHERS[@]}"; do
@@ -103,13 +109,27 @@ fi
 if [[ "$START" -eq 1 ]]; then
   [[ -f .env ]] || { echo "Missing .env in site root" >&2; exit 1; }
   docker compose --project-directory . \
-    -f upstream/docker-compose.yml \
+    -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    -f docker-compose.config.yml \
     -f docker-compose.apps.yml pull
   docker compose --project-directory . \
-    -f upstream/docker-compose.yml \
+    -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    -f docker-compose.config.yml \
     -f docker-compose.apps.yml up -d
+  docker compose --project-directory . \
+    -f upstream/docker-compose.backend.yml \
+    -f "upstream/$PORTS_FILE" \
+    -f docker-compose.config.yml \
+    -f docker-compose.apps.yml \
+    rm --force --stop pkm-data-permissions >/dev/null 2>&1 || true
+  docker compose --project-directory . \
+    -f upstream/docker-compose.frontend.yml \
+    -f "upstream/$FRONTEND_PORTS_FILE" pull
+  docker compose --project-directory . \
+    -f upstream/docker-compose.frontend.yml \
+    -f "upstream/$FRONTEND_PORTS_FILE" up -d
   echo "Compose up done."
 fi
 

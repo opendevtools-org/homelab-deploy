@@ -51,6 +51,7 @@ if [[ "$PORTS" != "lan" && "$PORTS" != "local" ]]; then
   exit 1
 fi
 PORTS_FILE="docker-compose.${PORTS}.yml"
+FRONTEND_PORTS_FILE="docker-compose.frontend.${PORTS}.yml"
 
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGET_DIR="$(cd "${TARGET_DIR:-$SCRIPT_ROOT}" && pwd)"
@@ -58,8 +59,8 @@ TARGET_DIR="$(cd "${TARGET_DIR:-$SCRIPT_ROOT}" && pwd)"
 
 already_site=0
 is_flat=0
-[[ -f "$TARGET_DIR/upstream/docker-compose.yml" ]] && already_site=1
-[[ -f "$TARGET_DIR/docker-compose.yml" ]] && is_flat=1
+[[ -f "$TARGET_DIR/upstream/docker-compose.yml" || -f "$TARGET_DIR/upstream/docker-compose.backend.yml" ]] && already_site=1
+[[ -f "$TARGET_DIR/docker-compose.yml" || -f "$TARGET_DIR/docker-compose.backend.yml" ]] && is_flat=1
 if [[ "$already_site" -eq 0 && "$is_flat" -eq 0 ]]; then
   echo "Neither flat install nor site instance: $TARGET_DIR" >&2
   exit 1
@@ -108,7 +109,10 @@ if [[ "$already_site" -eq 0 ]]; then
     New-HomelabSite.ps1 New-HomelabSite.sh \
     Update-HomelabUpstream.ps1 Update-HomelabUpstream.sh \
     Backup-DataGit.ps1 Backup-DataGit.sh \
-    Register-DataGitBackupTask.ps1 Register-DataGitBackup.sh
+    Register-DataGitBackupTask.ps1 Register-DataGitBackup.sh \
+    Pull-DataGit.ps1 Pull-DataGit.sh \
+    Register-DataGitPullTask.ps1 Register-DataGitPull.sh \
+    docker-compose.config.yml
   do
     # keep apps.yml content via backup; remove product copy from root
     [[ "$f" == "docker-compose.apps.yml" ]] && continue
@@ -204,6 +208,8 @@ cat >"$TARGET_DIR/.gitignore" <<'EOF'
 *.tar
 logs/
 upstream/data/
+**/__pycache__/
+data/pkm/scripts/**/.uploads/
 EOF
 
 cat >"$TARGET_DIR/README.md" <<EOF
@@ -211,18 +217,24 @@ cat >"$TARGET_DIR/README.md" <<EOF
 
 - \`upstream/\` — submodule ($UPSTREAM_URL)
 - \`data/\` — volumes
+- \`docker-compose.config.yml\` — one-time PKM data ownership
 - \`docker-compose.apps.yml\` — extra services
 - \`.env\` — secrets (not committed)
 - \`Update-HomelabUpstream.*\` — pull product updates
-- \`Backup-DataGit.*\` / \`Register-DataGitBackup*\` — daily commit/push of \`data/\`
+- \`Backup-DataGit.*\` / \`Register-DataGitBackup*\` — primary server commit/push
+- \`Pull-DataGit.*\` / \`Register-DataGitPull*\` — standby server sync
 
 ## Start
 
 \`\`\`bash
 docker compose --project-directory . \\
-  -f upstream/docker-compose.yml \\
+  -f upstream/docker-compose.backend.yml \\
   -f upstream/$PORTS_FILE \\
+  -f docker-compose.config.yml \\
   -f docker-compose.apps.yml up -d
+docker compose --project-directory . \\
+  -f upstream/docker-compose.frontend.yml \\
+  -f upstream/$FRONTEND_PORTS_FILE up -d
 \`\`\`
 
 ## Update product
@@ -232,25 +244,35 @@ docker compose --project-directory . \\
 # or: ./Update-HomelabUpstream.ps1 -Commit -Push -Start
 \`\`\`
 
-## Daily data backup
+## Git sync
 
-Commits and pushes only \`data/\`. If origin advanced, tries rebase then merge; real conflicts need manual fix.
+Optional HTTPS auth in \`.env\`: \`HOMELAB_GIT_USERNAME\` and \`HOMELAB_GIT_PAT\`.
+
+Two servers with the same data: primary runs Backup (00:05), standby runs Pull (00:10).
+Conflicts keep the remote file and save the local copy as \`name.local-conflict.HOST.TIMESTAMP.ext\`.
 
 \`\`\`bash
 ./Register-DataGitBackup.sh --time 00:05
 ./Backup-DataGit.sh
+./Register-DataGitPull.sh --time 00:10
+./Pull-DataGit.sh
 \`\`\`
 
 \`\`\`powershell
 .\\Register-DataGitBackupTask.ps1 -Time 00:05
 .\\Backup-DataGit.ps1
+.\\Register-DataGitPullTask.ps1 -Time 00:10
+.\\Pull-DataGit.ps1
 \`\`\`
 EOF
 
 for s in \
   Update-HomelabUpstream.sh Update-HomelabUpstream.ps1 \
   Backup-DataGit.sh Backup-DataGit.ps1 \
-  Register-DataGitBackup.sh Register-DataGitBackupTask.ps1
+  Register-DataGitBackup.sh Register-DataGitBackupTask.ps1 \
+  Pull-DataGit.sh Pull-DataGit.ps1 \
+  Register-DataGitPull.sh Register-DataGitPullTask.ps1 \
+  docker-compose.config.yml
 do
   if [[ -f "$TARGET_DIR/upstream/$s" ]]; then
     cp -a "$TARGET_DIR/upstream/$s" "$TARGET_DIR/$s"
@@ -260,6 +282,8 @@ done
 [[ -f "$TARGET_DIR/upstream/New-HomelabSite.sh" ]] && chmod +x "$TARGET_DIR/upstream/New-HomelabSite.sh" || true
 [[ -f "$TARGET_DIR/upstream/Backup-DataGit.sh" ]] && chmod +x "$TARGET_DIR/upstream/Backup-DataGit.sh" || true
 [[ -f "$TARGET_DIR/upstream/Register-DataGitBackup.sh" ]] && chmod +x "$TARGET_DIR/upstream/Register-DataGitBackup.sh" || true
+[[ -f "$TARGET_DIR/upstream/Pull-DataGit.sh" ]] && chmod +x "$TARGET_DIR/upstream/Pull-DataGit.sh" || true
+[[ -f "$TARGET_DIR/upstream/Register-DataGitPull.sh" ]] && chmod +x "$TARGET_DIR/upstream/Register-DataGitPull.sh" || true
 
 if [[ "$SKIP_GIT" -eq 0 && "$SKIP_COMMIT" -eq 0 && -d "$TARGET_DIR/.git" ]]; then
   cd "$TARGET_DIR"
@@ -290,21 +314,36 @@ fi
 if [[ "$START" -eq 1 ]]; then
   cd "$TARGET_DIR"
   [[ -f .env ]] || { echo "Missing .env" >&2; exit 1; }
-  echo "Starting Compose..."
+  echo "Starting Compose (backend then frontend)..."
   for n in pkm-backend pkm-frontend home-hub home-hub-platform; do
     docker rm -f "$n" >/dev/null 2>&1 || true
   done
   docker compose --project-directory . \
-    -f upstream/docker-compose.yml \
+    -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    -f docker-compose.config.yml \
     -f docker-compose.apps.yml pull
   docker compose --project-directory . \
-    -f upstream/docker-compose.yml \
+    -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    -f docker-compose.config.yml \
     -f docker-compose.apps.yml up -d
+  docker compose --project-directory . \
+    -f upstream/docker-compose.backend.yml \
+    -f "upstream/$PORTS_FILE" \
+    -f docker-compose.config.yml \
+    -f docker-compose.apps.yml \
+    rm --force --stop pkm-data-permissions >/dev/null 2>&1 || true
+  docker compose --project-directory . \
+    -f upstream/docker-compose.frontend.yml \
+    -f "upstream/$FRONTEND_PORTS_FILE" pull
+  docker compose --project-directory . \
+    -f upstream/docker-compose.frontend.yml \
+    -f "upstream/$FRONTEND_PORTS_FILE" up -d
 fi
 
 echo
 echo "Done. Flat install converted in place:"
 echo "  $TARGET_DIR"
-echo "  Start: cd \"$TARGET_DIR\" && docker compose --project-directory . -f upstream/docker-compose.yml -f upstream/$PORTS_FILE -f docker-compose.apps.yml up -d"
+echo "  Backend:  docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/$PORTS_FILE -f docker-compose.config.yml -f docker-compose.apps.yml up -d"
+echo "  Frontend: docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/$FRONTEND_PORTS_FILE up -d"

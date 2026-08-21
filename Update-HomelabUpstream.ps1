@@ -7,7 +7,8 @@
   or from upstream/ itself.
 
   After pull, refreshes site-root launchers from upstream/:
-  Update-HomelabUpstream.*, Backup-DataGit.*, Register-DataGitBackup*.
+    Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*,
+    Register-DataGitBackup*, Register-DataGitPull*, docker-compose.config.yml.
 
 .PARAMETER Ports
   lan | local. Default: lan
@@ -48,7 +49,8 @@ $here = $PSScriptRoot
 if ((Split-Path -Leaf $here) -eq "upstream" -and (Test-Path (Join-Path (Split-Path -Parent $here) "docker-compose.apps.yml"))) {
   $siteRoot = Split-Path -Parent $here
   $upstream = $here
-} elseif (Test-Path (Join-Path $here "upstream\docker-compose.yml")) {
+} elseif ((Test-Path (Join-Path $here "upstream\docker-compose.yml")) -or
+          (Test-Path (Join-Path $here "upstream\docker-compose.backend.yml"))) {
   $siteRoot = $here
   $upstream = Join-Path $here "upstream"
 } else {
@@ -56,6 +58,7 @@ if ((Split-Path -Leaf $here) -eq "upstream" -and (Test-Path (Join-Path (Split-Pa
 }
 
 $portsFile = if ($Ports -eq "local") { "docker-compose.local.yml" } else { "docker-compose.lan.yml" }
+$frontendPortsFile = if ($Ports -eq "local") { "docker-compose.frontend.local.yml" } else { "docker-compose.frontend.lan.yml" }
 
 function Invoke-Git {
   param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
@@ -88,7 +91,12 @@ $launcherNames = @(
   "Backup-DataGit.ps1",
   "Backup-DataGit.sh",
   "Register-DataGitBackupTask.ps1",
-  "Register-DataGitBackup.sh"
+  "Register-DataGitBackup.sh",
+  "Pull-DataGit.ps1",
+  "Pull-DataGit.sh",
+  "Register-DataGitPullTask.ps1",
+  "Register-DataGitPull.sh",
+  "docker-compose.config.yml"
 )
 $refreshed = @()
 foreach ($name in $launcherNames) {
@@ -140,19 +148,40 @@ if ($Start) {
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   & docker compose --project-directory . `
-    -f upstream/docker-compose.yml `
+    -f upstream/docker-compose.backend.yml `
     -f ("upstream/{0}" -f $portsFile) `
+    -f docker-compose.config.yml `
     -f docker-compose.apps.yml `
     pull
   if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = $prev; throw "docker compose pull failed" }
   & docker compose --project-directory . `
-    -f upstream/docker-compose.yml `
+    -f upstream/docker-compose.backend.yml `
     -f ("upstream/{0}" -f $portsFile) `
+    -f docker-compose.config.yml `
     -f docker-compose.apps.yml `
     up -d
   $code = $LASTEXITCODE
   $ErrorActionPreference = $prev
   if ($code -ne 0) { throw "docker compose up failed" }
+  $ErrorActionPreference = "Continue"
+  & docker compose --project-directory . `
+    -f upstream/docker-compose.backend.yml `
+    -f ("upstream/{0}" -f $portsFile) `
+    -f docker-compose.config.yml `
+    -f docker-compose.apps.yml `
+    rm --force --stop pkm-data-permissions 2>&1 | Out-Null
+  & docker compose --project-directory . `
+    -f upstream/docker-compose.frontend.yml `
+    -f ("upstream/{0}" -f $frontendPortsFile) `
+    pull
+  if ($LASTEXITCODE -ne 0) { $ErrorActionPreference = $prev; throw "docker compose frontend pull failed" }
+  & docker compose --project-directory . `
+    -f upstream/docker-compose.frontend.yml `
+    -f ("upstream/{0}" -f $frontendPortsFile) `
+    up -d
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+  if ($code -ne 0) { throw "docker compose frontend up failed" }
   Write-Host "Compose up done."
 }
 

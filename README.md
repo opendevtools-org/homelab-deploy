@@ -4,15 +4,19 @@ Docker Compose package. Images on `ghcr.io/opendevtools-org`.
 
 Needs Docker Compose v2 and access to `ghcr.io`.
 
-**Backend** (server) and **frontend** (device clients) are separate compose files.
+**Backend** (server APIs) and **frontend** (web clients) are **two Compose projects**, same split as a local homelab stack:
 
-| File | Where | Role |
-|------|--------|------|
-| `docker-compose.yml` | server | Hub Platform API + PKM API |
-| `docker-compose.lan.yml` or `.local.yml` | server | API host ports (pick one) |
-| `docker-compose.apps.yml` | server | extra **backends** (Market plugins) |
-| `docker-compose.frontend.yml` | device | Hub UI + PKM UI |
-| `docker-compose.frontend.lan.yml` or `.frontend.local.yml` | device | UI host ports |
+| Project | File | Where | Role |
+|---------|------|--------|------|
+| `homelab-backend` | `docker-compose.backend.yml` | server | Hub Platform API + PKM API |
+| | `docker-compose.yml` | server | alias of `docker-compose.backend.yml` |
+| | `docker-compose.lan.yml` or `.local.yml` | server | API host ports (pick one) |
+| | `docker-compose.config.yml` | server | one-time PKM data ownership |
+| | `docker-compose.apps.yml` | server | extra **backends** (Market plugins) |
+| `homelab-frontend` | `docker-compose.frontend.yml` | device or same host | Hub UI + PKM UI |
+| | `docker-compose.frontend.lan.yml` or `.frontend.local.yml` | device or same host | UI host ports |
+
+Run them with **separate** `docker compose` commands. Do not combine backend and frontend `-f` files into one `up`.
 
 Scripts: PowerShell (`.ps1`) and Bash (`.sh`) are equivalent.
 
@@ -24,11 +28,11 @@ cd homelab-deploy
 cp .env.example .env   # Windows: copy .env.example .env
 # fill secrets in .env
 
-docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml pull
-docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml up -d
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.apps.yml pull
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.apps.yml up -d
 ```
 
-Localhost: swap `lan` for `local`. Do not combine both.
+Localhost: swap `lan` for `local`. Do not combine both. `docker-compose.yml` is an alias of `docker-compose.backend.yml`.
 
 | | |
 |--|--|
@@ -37,9 +41,10 @@ Localhost: swap `lan` for `local`. Do not combine both.
 
 ## Flat install — web clients (devices)
 
-On each device (or on the same host if you still want hosted UIs), set the server URLs in `.env`:
+On each device, set the server URLs in `.env`. On the **same host** as the APIs, the defaults (`host.docker.internal`) are enough:
 
 ```bash
+# Device only — point at the server:
 # HUB_API_UPSTREAM=http://SERVER:8090
 # PKM_API_UPSTREAM=http://SERVER:8001
 docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
@@ -65,8 +70,10 @@ Upgrade (flat, server):
 
 ```bash
 git pull
-docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml pull
-docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.apps.yml up -d
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.apps.yml pull
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.apps.yml up -d
+docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml pull
+docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
 ```
 
 ## Site instance
@@ -102,22 +109,31 @@ Layout after convert:
 ./upstream/
 ./data/
 ./.env
+./docker-compose.config.yml
 ./docker-compose.apps.yml
 ./Update-HomelabUpstream.sh
 ./Update-HomelabUpstream.ps1
 ./Backup-DataGit.sh
 ./Backup-DataGit.ps1
+./Pull-DataGit.sh
+./Pull-DataGit.ps1
 ./Register-DataGitBackup.sh
 ./Register-DataGitBackupTask.ps1
+./Register-DataGitPull.sh
+./Register-DataGitPullTask.ps1
 ```
 
 Start:
 
 ```bash
 docker compose --project-directory . \
-  -f upstream/docker-compose.yml \
+  -f upstream/docker-compose.backend.yml \
   -f upstream/docker-compose.lan.yml \
+  -f docker-compose.config.yml \
   -f docker-compose.apps.yml up -d
+docker compose --project-directory . \
+  -f upstream/docker-compose.frontend.yml \
+  -f upstream/docker-compose.frontend.lan.yml up -d
 ```
 
 `--project-directory .` so volumes hit this folder’s `data/`.
@@ -146,7 +162,15 @@ No flags: only `git pull` in `upstream/`.
 
 ### Daily data backup — `Backup-DataGit`
 
-Site instances only (`data/` is versioned; flat install gitignores it). Commits and pushes only `data/`. If someone else pushed to the same branch, the script tries `pull --rebase`, then falls back to merge. Real conflicts abort and need a manual fix (no force-push).
+Site instances only (`data/` is versioned; flat install gitignores it). Commits and pushes `data/`, `docker-compose.apps.yml`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge. On a real conflict it keeps the remote file as canonical and saves the local copy next to it:
+
+```text
+filename.local-conflict.HOSTNAME.20260820-143000.md
+```
+
+Those conflict copies are committed and pushed, so local edits are not dropped silently.
+
+Optional HTTPS auth in `.env` (not committed): `HOMELAB_GIT_USERNAME` and `HOMELAB_GIT_PAT`. If the PAT is set, the scripts use HTTP Basic against `origin` without changing the Git remote. Requires an HTTPS origin. Host git credentials (SSH or credential helper) still work when the PAT is empty.
 
 Optional notify webhook: `HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL`. Logs under `logs/`.
 
@@ -163,7 +187,29 @@ chmod +x Backup-DataGit.sh Register-DataGitBackup.sh
 ./Backup-DataGit.sh
 ```
 
-Host git credentials (SSH or credential helper) must already work for non-interactive push. Unregister Linux cron: `./Register-DataGitBackup.sh --uninstall`.
+Unregister Linux cron: `./Register-DataGitBackup.sh --uninstall`.
+
+### Two servers — `Pull-DataGit`
+
+If both machines can receive edits, schedule Git on both:
+
+- primary: `Backup-DataGit.sh` or `Backup-DataGit.ps1`
+- standby: `Pull-DataGit.sh` or `Pull-DataGit.ps1`
+
+The standby pull first commits local changes in `data/`, `docker-compose.apps.yml`, and `README.md`, then syncs with `origin` and pushes. Edits made on either server reach the other on the next run.
+
+```powershell
+.\Register-DataGitPullTask.ps1 -Time 00:10
+.\Pull-DataGit.ps1
+```
+
+```bash
+chmod +x Pull-DataGit.sh Register-DataGitPull.sh
+./Register-DataGitPull.sh --time 00:10
+./Pull-DataGit.sh
+```
+
+This is scheduled Git sync, not a realtime cluster. Shorten the interval if you want less delay, and avoid editing the same file on both servers at once.
 
 ### Clone elsewhere
 
