@@ -50,10 +50,10 @@ gitignore_extras() {
   while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line%$'\r'}"
     [[ -z "$line" ]] && continue
-    [[ "$line" == \# Generated* ]] && continue
-    [[ "$line" == \# Site-specific* ]] && continue
-    [[ "$line" == \# Site\ extras* ]] && continue
-    [[ "$line" == \# Product\ rules:* ]] && continue
+    [[ "$line" == "# Generated"* ]] && continue
+    [[ "$line" == "# Site-specific"* ]] && continue
+    [[ "$line" == "# Site extras"* ]] && continue
+    [[ "$line" == "# Product rules:"* ]] && continue
     grep -qxF "$line" <(tr -d '\r' < "$product") 2>/dev/null && continue
     printf '%s\n' "$line"
   done < "$existing"

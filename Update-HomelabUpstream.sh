@@ -78,8 +78,11 @@ LAUNCHERS=(
 REFRESHED=()
 for s in "${LAUNCHERS[@]}"; do
   if [[ -f "$UPSTREAM/$s" ]]; then
-    cp -a "$UPSTREAM/$s" "$SITE_ROOT/$s"
-    [[ "$s" == *.sh ]] && chmod +x "$SITE_ROOT/$s"
+    # Copy via temp + mv so a running bash script keeps its old inode.
+    tmp="$(mktemp "$SITE_ROOT/tmp-launcher.XXXXXX")"
+    cp -a "$UPSTREAM/$s" "$tmp"
+    [[ "$s" == *.sh ]] && chmod +x "$tmp"
+    mv -f "$tmp" "$SITE_ROOT/$s"
     REFRESHED+=("$s")
   fi
 done
@@ -94,10 +97,10 @@ gitignore_extras() {
   while IFS= read -r line || [[ -n "$line" ]]; do
     line="${line%$'\r'}"
     [[ -z "$line" ]] && continue
-    [[ "$line" == \# Generated* ]] && continue
-    [[ "$line" == \# Site-specific* ]] && continue
-    [[ "$line" == \# Site\ extras* ]] && continue
-    [[ "$line" == \# Product\ rules:* ]] && continue
+    [[ "$line" == "# Generated"* ]] && continue
+    [[ "$line" == "# Site-specific"* ]] && continue
+    [[ "$line" == "# Site extras"* ]] && continue
+    [[ "$line" == "# Product rules:"* ]] && continue
     grep -qxF "$line" <(tr -d '\r' < "$product") 2>/dev/null && continue
     printf '%s\n' "$line"
   done < "$existing"
