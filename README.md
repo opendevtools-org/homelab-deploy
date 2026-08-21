@@ -131,6 +131,9 @@ Layout after convert:
 ./Register-DataGitPullTask.ps1
 ./Reindex-PkmFromDisk.sh
 ./Reindex-PkmFromDisk.ps1
+./.gitignore.upstream
+./.gitignore.custom
+./.gitignore
 ```
 
 Start:
@@ -172,7 +175,7 @@ No flags: only `git pull` in `upstream/`.
 
 ### Daily data backup — `Backup-DataGit`
 
-Site instances only (`data/` is versioned). `New-HomelabSite` copies this package's `.gitignore` (secrets, logs, SQLite WAL, uploads, conflict copies). Commits and pushes `data/`, `docker-compose.apps.yml`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge. On a real conflict it keeps the remote file as canonical and saves the local copy next to it:
+Site instances only (`data/` is versioned). `New-HomelabSite` initializes a layered gitignore: `.gitignore.upstream` tracks this package, `.gitignore.custom` holds **only** site extras, and `.gitignore` is generated from both (do not edit it). `Update-HomelabUpstream` refreshes the upstream layer, so custom rules survive product updates. Commits and pushes `data/`, `docker-compose.apps.yml`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge. On a real conflict it keeps the remote file as canonical and saves the local copy next to it:
 
 ```text
 filename.local-conflict.HOSTNAME.20260820-143000.md
