@@ -1,0 +1,21 @@
+{
+  admin off
+}
+
+{$HUB_HOSTNAME} {
+  reverse_proxy home-hub:80
+  tls internal
+}
+
+{$PKM_HOSTNAME} {
+  reverse_proxy pkm-frontend:80
+  tls internal
+}
+
+http://{$HUB_HOSTNAME} {
+  redir https://{$HUB_HOSTNAME}{uri} 301
+}
+
+http://{$PKM_HOSTNAME} {
+  redir https://{$PKM_HOSTNAME}{uri} 301
+}

@@ -65,6 +65,39 @@ docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.remote.
 
 Login: `HUB_ADMIN_*` from `.env`. Create users under Utenti. Data in `./data/hub` and `./data/pkm` (gitignored) on the **server**.
 
+## LAN HTTPS (clipboard / paste)
+
+Browsers allow clipboard paste of images only in a **secure context**: `localhost` or **HTTPS**. A VPN or LAN URL such as `http://10.0.0.10:3030` is not a secure context, so paste fails even though the rest of the UI works.
+
+Set LAN names in `.env` (and point them at the server with DNS or a client `hosts` file):
+
+```text
+HUB_HOSTNAME=hub.home.arpa
+PKM_HOSTNAME=pkm.home.arpa
+PUBLIC_PKM_URL=https://pkm.home.arpa/
+PUBLIC_PKM_URL_HTTP=http://192.168.1.10:3030/
+HUB_COOKIE_SECURE=true
+```
+
+Then add the Caddy overlay when starting the web clients (binds host ports 80 and 443):
+
+```bash
+docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml \
+  -f docker-compose.https.yml up -d
+```
+
+Site instance: same overlay as `-f docker-compose.https.yml` (copied to the site root). `Update-HomelabUpstream --start` / `-Start` includes it automatically when both hostnames are set.
+
+Caddy uses a local CA (`tls internal`). Trust it once on each client:
+
+```bash
+docker exec pkm-https cat /data/caddy/pki/authorities/local/root.crt
+```
+
+Or replace `tls internal` in `Caddyfile` with a certificate you already trust. After changing `PUBLIC_PKM_URL`, recreate the backend as well.
+
+Direct HTTP on `:3080` / `:3030` still works; use the HTTPS names for paste.
+
 ## Community plugins (Hub Market)
 
 Public plugins live in [`opendevtools-org/hub-community-plugins`](https://github.com/opendevtools-org/hub-community-plugins).
@@ -74,6 +107,14 @@ Public plugins live in [`opendevtools-org/hub-community-plugins`](https://github
 
 From Hub `/market`, **Installa** starts the plugin backend on the Platform server and opens the web client in that Hub (`/p/{id}/`). Merge the plugin’s `.env.example` into `.env` if it has one.
 
+To test a plugin **before** publishing, clone `hub-community-plugins`, edit `catalog.json` + `plugins/<id>/`, then set in `.env`:
+
+```text
+HUB_MARKET_PLUGINS_HOST=./community-plugins
+```
+
+Recreate Platform. Market shows a “catalogo locale” banner when that folder has `catalog.json`. Leave the variable unset (or point at the empty `.market-plugins-local`) for the GitHub catalog.
+
 Upgrade (flat, server):
 
 ```bash
@@ -82,6 +123,7 @@ docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker
 docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.apps.yml up -d
 docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml pull
 docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
+# If HUB_HOSTNAME and PKM_HOSTNAME are set, also add -f docker-compose.https.yml
 ```
 
 ## Site instance
@@ -131,6 +173,8 @@ Layout after convert:
 ./Register-DataGitPullTask.ps1
 ./Reindex-PkmFromDisk.sh
 ./Reindex-PkmFromDisk.ps1
+./Caddyfile
+./docker-compose.https.yml
 ./.gitignore.upstream
 ./.gitignore.custom
 ./.gitignore
@@ -147,6 +191,7 @@ docker compose --project-directory . \
 docker compose --project-directory . \
   -f upstream/docker-compose.frontend.yml \
   -f upstream/docker-compose.frontend.lan.yml up -d
+# LAN HTTPS (clipboard): add -f docker-compose.https.yml when HUB_HOSTNAME and PKM_HOSTNAME are set
 ```
 
 `--project-directory .` so volumes hit this folder’s `data/`.

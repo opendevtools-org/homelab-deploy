@@ -22,6 +22,9 @@ services:
       PLATFORM_UPSTREAM_HOST: host.docker.internal
       HUB_BUILTIN_PLUGINS: ${HUB_BUILTIN_PLUGINS:-pkm}
       PUBLIC_PKM_URL: ${PUBLIC_PKM_URL:-http://127.0.0.1:3030/}
+      PUBLIC_PKM_URL_HTTP: ${PUBLIC_PKM_URL_HTTP:-}
+      HUB_HOSTNAME: ${HUB_HOSTNAME:-}
+      PKM_HOSTNAME: ${PKM_HOSTNAME:-}
       BUILTIN_PKM_PORT: ${BUILTIN_PKM_PORT:-3030}
       HUB_JWT_SECRET: ${HUB_JWT_SECRET:?set HUB_JWT_SECRET in .env}
       HUB_ADMIN_USERNAME: ${HUB_ADMIN_USERNAME:-admin}
@@ -34,8 +37,10 @@ services:
       HUB_MARKET_CATALOG_URL: ${HUB_MARKET_CATALOG_URL:-https://raw.githubusercontent.com/opendevtools-org/hub-community-plugins/main/catalog.json}
       HUB_MARKET_CATALOG_TTL_SEC: ${HUB_MARKET_CATALOG_TTL_SEC:-600}
       HUB_MARKET_PRIVATE_PATH: ${HUB_MARKET_PRIVATE_PATH:-}
+      HUB_MARKET_PLUGINS_DIR: /market-plugins
     volumes:
       - ./data/hub:/data
+      - ${HUB_MARKET_PLUGINS_HOST:-./.market-plugins-local}:/market-plugins:ro
       - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - "host.docker.internal:host-gateway"

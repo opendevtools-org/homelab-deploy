@@ -74,6 +74,8 @@ LAUNCHERS=(
   Reindex-PkmFromDisk.sh
   Reindex-PkmFromDisk.ps1
   docker-compose.config.yml
+  docker-compose.https.yml
+  Caddyfile
 )
 REFRESHED=()
 for s in "${LAUNCHERS[@]}"; do
@@ -136,6 +138,21 @@ fi
 
 cd "$SITE_ROOT"
 
+env_val() {
+  local key="$1" file="$2"
+  grep -E "^[[:space:]]*${key}=" "$file" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//'
+}
+
+https_overlay_enabled() {
+  local envf="$SITE_ROOT/.env"
+  local overlay="$SITE_ROOT/docker-compose.https.yml"
+  [[ -f "$overlay" && -f "$envf" ]] || return 1
+  local hub pkm
+  hub="$(env_val HUB_HOSTNAME "$envf")"
+  pkm="$(env_val PKM_HOSTNAME "$envf")"
+  [[ -n "$hub" && -n "$pkm" ]]
+}
+
 if [[ "$COMMIT" -eq 1 ]]; then
   [[ -d "$SITE_ROOT/.git" ]] || { echo "No .git in site root" >&2; exit 1; }
   git add upstream
@@ -166,7 +183,7 @@ fi
 if [[ "$START" -eq 1 ]]; then
   [[ -f .env ]] || { echo "Missing .env in site root" >&2; exit 1; }
   echo "Starting Compose (stop old containers if names conflict)..."
-  for n in pkm-backend pkm-frontend home-hub home-hub-platform; do
+  for n in pkm-backend pkm-frontend home-hub home-hub-platform pkm-https; do
     docker rm -f "$n" >/dev/null 2>&1 || true
   done
   docker compose --project-directory . \
@@ -185,12 +202,24 @@ if [[ "$START" -eq 1 ]]; then
     -f docker-compose.config.yml \
     -f docker-compose.apps.yml \
     rm --force --stop pkm-data-permissions >/dev/null 2>&1 || true
-  docker compose --project-directory . \
-    -f upstream/docker-compose.frontend.yml \
-    -f "upstream/$FRONTEND_PORTS_FILE" pull
-  docker compose --project-directory . \
-    -f upstream/docker-compose.frontend.yml \
-    -f "upstream/$FRONTEND_PORTS_FILE" up -d
+  if https_overlay_enabled; then
+    echo "LAN HTTPS overlay (Caddy) enabled."
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      -f docker-compose.https.yml pull
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      -f docker-compose.https.yml up -d
+  else
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" pull
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" up -d
+  fi
   echo "Compose up done."
 
   helper="$SITE_ROOT/Reindex-PkmFromDisk.sh"

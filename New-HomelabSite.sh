@@ -98,6 +98,22 @@ write_layered_gitignore() {
   fi
 }
 
+env_val() {
+  local key="$1" file="$2"
+  grep -E "^[[:space:]]*${key}=" "$file" 2>/dev/null | tail -n1 | cut -d= -f2- | tr -d '\r' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'\'']//' -e 's/["'\'']$//'
+}
+
+https_overlay_enabled() {
+  local root="${1:-.}"
+  local envf="$root/.env"
+  local overlay="$root/docker-compose.https.yml"
+  [[ -f "$overlay" && -f "$envf" ]] || return 1
+  local hub pkm
+  hub="$(env_val HUB_HOSTNAME "$envf")"
+  pkm="$(env_val PKM_HOSTNAME "$envf")"
+  [[ -n "$hub" && -n "$pkm" ]]
+}
+
 if [[ "$SKIP_GIT" -eq 0 && -z "$SITE_REPO" ]]; then
   echo "Pass --site-repo URL or --skip-git" >&2
   exit 1
@@ -161,6 +177,8 @@ if [[ "$already_site" -eq 0 ]]; then
     docker-compose.lan.yml docker-compose.local.yml \
     docker-compose.frontend.lan.yml docker-compose.frontend.local.yml \
     docker-compose.frontend.remote.yml \
+    docker-compose.https.yml \
+    Caddyfile \
     docker-compose.apps.yml docker-compose.apps.example.yml \
     LICENSE README.md \
     New-HomelabSite.ps1 New-HomelabSite.sh \
@@ -276,6 +294,7 @@ cat >"$TARGET_DIR/README.md" <<EOF
 - \`Backup-DataGit.*\` / \`Register-DataGitBackup*\` — primary server commit/push
 - \`Pull-DataGit.*\` / \`Register-DataGitPull*\` — standby server sync
 - \`Reindex-PkmFromDisk.*\` — after git sync, import PKM pages/files/PDFs/bookmarks from disk
+- \`Caddyfile\` / \`docker-compose.https.yml\` — optional LAN HTTPS (clipboard paste)
 
 ## Start
 
@@ -288,6 +307,7 @@ docker compose --project-directory . \\
 docker compose --project-directory . \\
   -f upstream/docker-compose.frontend.yml \\
   -f upstream/$FRONTEND_PORTS_FILE up -d
+# LAN HTTPS: add -f docker-compose.https.yml when HUB_HOSTNAME and PKM_HOSTNAME are set
 \`\`\`
 
 ## Update product
@@ -327,7 +347,7 @@ for s in \
   Pull-DataGit.sh Pull-DataGit.ps1 \
   Register-DataGitPull.sh Register-DataGitPullTask.ps1 \
   Reindex-PkmFromDisk.sh Reindex-PkmFromDisk.ps1 \
-  docker-compose.config.yml
+  docker-compose.config.yml docker-compose.https.yml Caddyfile
 do
   if [[ -f "$TARGET_DIR/upstream/$s" ]]; then
     cp -a "$TARGET_DIR/upstream/$s" "$TARGET_DIR/$s"
@@ -371,7 +391,7 @@ if [[ "$START" -eq 1 ]]; then
   cd "$TARGET_DIR"
   [[ -f .env ]] || { echo "Missing .env" >&2; exit 1; }
   echo "Starting Compose (backend then frontend)..."
-  for n in pkm-backend pkm-frontend home-hub home-hub-platform; do
+  for n in pkm-backend pkm-frontend home-hub home-hub-platform pkm-https; do
     docker rm -f "$n" >/dev/null 2>&1 || true
   done
   docker compose --project-directory . \
@@ -390,12 +410,24 @@ if [[ "$START" -eq 1 ]]; then
     -f docker-compose.config.yml \
     -f docker-compose.apps.yml \
     rm --force --stop pkm-data-permissions >/dev/null 2>&1 || true
-  docker compose --project-directory . \
-    -f upstream/docker-compose.frontend.yml \
-    -f "upstream/$FRONTEND_PORTS_FILE" pull
-  docker compose --project-directory . \
-    -f upstream/docker-compose.frontend.yml \
-    -f "upstream/$FRONTEND_PORTS_FILE" up -d
+  if https_overlay_enabled "$TARGET_DIR"; then
+    echo "LAN HTTPS overlay (Caddy) enabled."
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      -f docker-compose.https.yml pull
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      -f docker-compose.https.yml up -d
+  else
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" pull
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" up -d
+  fi
 fi
 
 echo

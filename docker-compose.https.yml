@@ -1,0 +1,44 @@
+# Optional LAN HTTPS reverse proxy (Caddy).
+# Browsers treat clipboard paste (images) as a secure-context API:
+# it works on localhost and on HTTPS, not on a VPN/LAN HTTP URL
+# such as http://10.0.0.10:3030.
+#
+# Flat install:
+#   docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml \
+#     -f docker-compose.https.yml up -d
+# Site instance:
+#   docker compose --project-directory . \
+#     -f upstream/docker-compose.frontend.yml \
+#     -f upstream/docker-compose.frontend.lan.yml \
+#     -f docker-compose.https.yml up -d
+#
+# Requires in .env:
+#   HUB_HOSTNAME=hub.home.arpa
+#   PKM_HOSTNAME=pkm.home.arpa
+#   PUBLIC_PKM_URL=https://pkm.home.arpa/
+# Point both names at the server (LAN DNS or client hosts file).
+# Caddy uses a local CA (`tls internal`); trust it once on each client,
+# or replace tls internal with a real certificate.
+
+services:
+  pkm-https:
+    image: caddy:2-alpine
+    container_name: pkm-https
+    restart: unless-stopped
+    depends_on:
+      - hub
+      - pkm-frontend
+    environment:
+      HUB_HOSTNAME: "${HUB_HOSTNAME:?set HUB_HOSTNAME in .env (example: hub.home.arpa)}"
+      PKM_HOSTNAME: "${PKM_HOSTNAME:?set PKM_HOSTNAME in .env (example: pkm.home.arpa)}"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - pkm-caddy-data:/data
+      - pkm-caddy-config:/config
+
+volumes:
+  pkm-caddy-data:
+  pkm-caddy-config:

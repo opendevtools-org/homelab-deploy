@@ -9,7 +9,8 @@
   After pull, refreshes site-root launchers from upstream/:
     Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*,
     Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
-    docker-compose.config.yml, and the layered gitignore files.
+    docker-compose.config.yml, docker-compose.https.yml, Caddyfile,
+    and the layered gitignore files.
 
 .PARAMETER Ports
   lan | local. Default: lan
@@ -209,7 +210,9 @@ $launcherNames = @(
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",
   "Reindex-PkmFromDisk.sh",
-  "docker-compose.config.yml"
+  "docker-compose.config.yml",
+  "docker-compose.https.yml",
+  "Caddyfile"
 )
 $refreshed = @()
 foreach ($name in $launcherNames) {
@@ -225,6 +228,29 @@ if ($refreshed.Count -gt 0) {
 }
 
 Set-Location $siteRoot
+
+function Get-DotEnvValue {
+  param([string]$Path, [string]$Key)
+  if (-not (Test-Path -LiteralPath $Path)) { return "" }
+  $found = ""
+  foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
+    if ($line -match ("^\s*{0}=(.*)$" -f [regex]::Escape($Key))) {
+      $found = $Matches[1].Trim().Trim('"').Trim("'")
+    }
+  }
+  return $found
+}
+
+function Test-HttpsOverlayEnabled {
+  $envPath = Join-Path $siteRoot ".env"
+  $overlay = Join-Path $siteRoot "docker-compose.https.yml"
+  if (-not (Test-Path -LiteralPath $envPath) -or -not (Test-Path -LiteralPath $overlay)) {
+    return $false
+  }
+  $hub = Get-DotEnvValue $envPath "HUB_HOSTNAME"
+  $pkm = Get-DotEnvValue $envPath "PKM_HOSTNAME"
+  return -not [string]::IsNullOrWhiteSpace($hub) -and -not [string]::IsNullOrWhiteSpace($pkm)
+}
 
 if ($Commit) {
   if (-not (Test-Path (Join-Path $siteRoot ".git"))) {
@@ -285,7 +311,7 @@ if ($Start) {
   $prev = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
-    foreach ($n in @("pkm-backend", "pkm-frontend", "home-hub", "home-hub-platform")) {
+    foreach ($n in @("pkm-backend", "pkm-frontend", "home-hub", "home-hub-platform", "pkm-https")) {
       & docker rm -f $n 2>&1 | Out-Null
     }
     $backendComposeArgs = @(
@@ -305,6 +331,10 @@ if ($Start) {
       "-f", "upstream/docker-compose.frontend.yml",
       "-f", ("upstream/{0}" -f $frontendPortsFile)
     )
+    if (Test-HttpsOverlayEnabled) {
+      Write-Host "LAN HTTPS overlay (Caddy) enabled."
+      $frontendComposeArgs += @("-f", "docker-compose.https.yml")
+    }
     $code = Invoke-DockerCommand ($frontendComposeArgs + @("pull"))
     if ($code -ne 0) { throw "docker compose frontend pull failed" }
     $code = Invoke-DockerCommand ($frontendComposeArgs + @("up", "-d"))

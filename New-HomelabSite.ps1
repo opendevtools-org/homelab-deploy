@@ -121,6 +121,30 @@ function Clear-AnonymousDockerConfig {
   $script:UseAnonymousDockerConfig = $false
 }
 
+function Get-DotEnvValue {
+  param([string]$Path, [string]$Key)
+  if (-not (Test-Path -LiteralPath $Path)) { return "" }
+  $found = ""
+  foreach ($line in [System.IO.File]::ReadAllLines($Path)) {
+    if ($line -match ("^\s*{0}=(.*)$" -f [regex]::Escape($Key))) {
+      $found = $Matches[1].Trim().Trim('"').Trim("'")
+    }
+  }
+  return $found
+}
+
+function Test-HttpsOverlayEnabled {
+  param([string]$Root)
+  $envPath = Join-Path $Root ".env"
+  $overlay = Join-Path $Root "docker-compose.https.yml"
+  if (-not (Test-Path -LiteralPath $envPath) -or -not (Test-Path -LiteralPath $overlay)) {
+    return $false
+  }
+  $hub = Get-DotEnvValue $envPath "HUB_HOSTNAME"
+  $pkm = Get-DotEnvValue $envPath "PKM_HOSTNAME"
+  return -not [string]::IsNullOrWhiteSpace($hub) -and -not [string]::IsNullOrWhiteSpace($pkm)
+}
+
 function Invoke-DockerCommand {
   param([string[]]$DockerArgs)
 
@@ -302,6 +326,8 @@ if (-not $alreadySite) {
     "docker-compose.frontend.lan.yml",
     "docker-compose.frontend.local.yml",
     "docker-compose.frontend.remote.yml",
+    "docker-compose.https.yml",
+    "Caddyfile",
     "docker-compose.apps.example.yml",
     "LICENSE",
     "README.md",
@@ -465,6 +491,7 @@ Converted from a flat ``homelab-deploy`` install.
 - ``Backup-DataGit.ps1`` / ``.sh`` — primary server: commit/push site data
 - ``Pull-DataGit.ps1`` / ``.sh`` — standby server: sync from origin
 - ``Reindex-PkmFromDisk.ps1`` / ``.sh`` — after git sync, import PKM items from disk
+- ``Caddyfile`` / ``docker-compose.https.yml`` — optional LAN HTTPS (clipboard paste)
 - ``Register-DataGitBackup*`` / ``Register-DataGitPull*`` — daily schedules
 
 ## Start
@@ -478,6 +505,7 @@ docker compose --project-directory . \\
 docker compose --project-directory . \\
   -f upstream/docker-compose.frontend.yml \\
   -f upstream/$frontendPortsFile up -d
+# LAN HTTPS: add -f docker-compose.https.yml when HUB_HOSTNAME and PKM_HOSTNAME are set
 ``````
 
 ## Update product
@@ -530,7 +558,9 @@ foreach ($name in @(
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",
   "Reindex-PkmFromDisk.sh",
-  "docker-compose.config.yml"
+  "docker-compose.config.yml",
+  "docker-compose.https.yml",
+  "Caddyfile"
 )) {
   $src = Join-Path $TargetDir ("upstream\{0}" -f $name)
   if (Test-Path $src) {
@@ -595,7 +625,7 @@ if ($Start) {
   $prev = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
-    foreach ($n in @("pkm-backend", "pkm-frontend", "home-hub", "home-hub-platform")) {
+    foreach ($n in @("pkm-backend", "pkm-frontend", "home-hub", "home-hub-platform", "pkm-https")) {
       & docker rm -f $n 2>&1 | Out-Null
     }
     $backendComposeArgs = @(
@@ -615,6 +645,10 @@ if ($Start) {
       "-f", "upstream/docker-compose.frontend.yml",
       "-f", ("upstream/{0}" -f $frontendPortsFile)
     )
+    if (Test-HttpsOverlayEnabled $TargetDir) {
+      Write-Host "LAN HTTPS overlay (Caddy) enabled."
+      $frontendComposeArgs += @("-f", "docker-compose.https.yml")
+    }
     $code = Invoke-DockerCommand ($frontendComposeArgs + @("pull"))
     if ($code -ne 0) { throw "docker compose frontend pull failed" }
     $code = Invoke-DockerCommand ($frontendComposeArgs + @("up", "-d"))
