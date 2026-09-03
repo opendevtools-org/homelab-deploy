@@ -20,8 +20,9 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$backupPaths = @("data", "docker-compose.apps.yml", "README.md")
+$backupPaths = @("data", "docker-compose.apps.yml", "README.md", "overrides")
 $excludePathspec = ":(exclude)data/pkm/scripts/**/.uploads/**"
+$sqliteMergeHelper = Join-Path $PSScriptRoot "Merge-SqliteGitConflict.py"
 $script:gitExtraArgs = @()
 $script:hostId = ([System.Net.Dns]::GetHostName() -replace '[^A-Za-z0-9._-]', '-')
 if ([string]::IsNullOrWhiteSpace($script:hostId)) { $script:hostId = "unknown-host" }
@@ -87,6 +88,103 @@ function Invoke-Git {
   return $output
 }
 
+function Export-GitBlob {
+  param(
+    [string]$ObjectSpec,
+    [string]$Destination
+  )
+
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = "git"
+  $startInfo.Arguments = 'cat-file blob "{0}"' -f ($ObjectSpec -replace '"', '\"')
+  $startInfo.UseShellExecute = $false
+  $startInfo.RedirectStandardOutput = $true
+  $startInfo.RedirectStandardError = $true
+  $startInfo.CreateNoWindow = $true
+
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo = $startInfo
+  if (-not $process.Start()) {
+    throw "Failed to start git cat-file."
+  }
+
+  try {
+    $file = [System.IO.File]::Create($Destination)
+    try {
+      $process.StandardOutput.BaseStream.CopyTo($file)
+    } finally {
+      $file.Dispose()
+    }
+    $errorText = $process.StandardError.ReadToEnd()
+    $process.WaitForExit()
+    if ($process.ExitCode -ne 0) {
+      throw ("git cat-file failed for {0}: {1}" -f $ObjectSpec, $errorText.Trim())
+    }
+  } finally {
+    $process.Dispose()
+  }
+}
+
+function Merge-SqliteConflict {
+  param([string]$Path)
+
+  $databaseType = switch ($Path) {
+    "data/hub/platform.db" { "platform" }
+    "data/pkm/pkm.db" { "pkm" }
+    default { return $false }
+  }
+
+  $python = Get-Command python3 -ErrorAction SilentlyContinue
+  if (-not $python) { $python = Get-Command python -ErrorAction SilentlyContinue }
+  if (-not $python) { $python = Get-Command py -ErrorAction SilentlyContinue }
+  if (-not $python -or -not (Test-Path $sqliteMergeHelper)) {
+    Send-Notification -Level "WARN" -Message ("SQLite merge unavailable for {0}; Python 3 and Merge-SqliteGitConflict.py are required." -f $Path)
+    return $false
+  }
+
+  $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("homelab-sqlite-merge-{0}" -f [Guid]::NewGuid())
+  New-Item -ItemType Directory -Path $tempDir | Out-Null
+  try {
+    $basePath = Join-Path $tempDir "base.db"
+    $localPath = Join-Path $tempDir "local.db"
+    $remotePath = Join-Path $tempDir "remote.db"
+    $mergedPath = Join-Path $tempDir "merged.db"
+    Export-GitBlob -ObjectSpec (":1:{0}" -f $Path) -Destination $basePath
+    Export-GitBlob -ObjectSpec (":2:{0}" -f $Path) -Destination $localPath
+    Export-GitBlob -ObjectSpec (":3:{0}" -f $Path) -Destination $remotePath
+
+    $helperArgs = @(
+      $sqliteMergeHelper, "--type", $databaseType,
+      "--base", $basePath, "--local", $localPath,
+      "--remote", $remotePath, "--output", $mergedPath
+    )
+    if ($python.Name -eq "py.exe" -or $python.Name -eq "py") {
+      $helperArgs = @("-3") + $helperArgs
+    }
+
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $output = & $python.Source @helperArgs 2>&1
+    $code = $LASTEXITCODE
+    $ErrorActionPreference = $prev
+    $summary = ($output | Out-String).Trim()
+    if ($code -ne 0) {
+      Send-Notification -Level "WARN" -Message ("SQLite merge failed for {0}: {1}" -f $Path, $summary)
+      return $false
+    }
+
+    Copy-Item -LiteralPath $mergedPath -Destination $Path -Force
+    Invoke-Git add -- $Path | Out-Null
+    Send-Notification -Level "INFO" -Message ("Conflict in {0}: SQLite rows merged successfully ({1})." -f $Path, $summary)
+    return $true
+  } catch {
+    Send-Notification -Level "WARN" -Message ("SQLite merge skipped for {0}: {1}" -f $Path, $_.Exception.Message)
+    return $false
+  } finally {
+    Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+  }
+}
+
 function New-ConflictArchivePath {
   param([string]$Path)
 
@@ -136,6 +234,10 @@ function Resolve-GitConflictsWithRemote {
   }
 
   foreach ($path in $conflictedPaths) {
+    if (Merge-SqliteConflict -Path $path) {
+      continue
+    }
+
     $archive = New-ConflictArchivePath -Path $path
     $archiveDir = Split-Path -Parent $archive
 

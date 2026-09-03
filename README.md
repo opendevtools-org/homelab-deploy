@@ -98,6 +98,19 @@ Or replace `tls internal` in `Caddyfile` with a certificate you already trust. A
 
 Direct HTTP on `:3080` / `:3030` still works; use the HTTPS names for paste.
 
+## Code overrides
+
+Put patches in `overrides/<service>/` and recreate the container. No image rebuild. See [`overrides/README.md`](./overrides/README.md).
+
+| Folder | Drop |
+|--------|------|
+| `overrides/pkm-backend/` | `sitecustomize.py` (loaded via `PYTHONPATH=/overrides`) |
+| `overrides/hub-platform/` | `sitecustomize.py` |
+| `overrides/hub-frontend/` | `default.conf` (optional nginx template) |
+| `overrides/pkm-frontend/` | `default.conf` |
+
+Site instance: the same folders live at the site root (`./overrides`), not inside `upstream/`. Compose uses `--project-directory .` so the mounts hit the site copies.
+
 ## Community plugins (Hub Market)
 
 Public plugins live in [`opendevtools-org/hub-community-plugins`](https://github.com/opendevtools-org/hub-community-plugins).
@@ -175,6 +188,7 @@ Layout after convert:
 ./Reindex-PkmFromDisk.ps1
 ./Caddyfile
 ./docker-compose.https.yml
+./overrides/
 ./.gitignore.upstream
 ./.gitignore.custom
 ./.gitignore
@@ -220,7 +234,9 @@ No flags: only `git pull` in `upstream/`.
 
 ### Daily data backup — `Backup-DataGit`
 
-Site instances only (`data/` is versioned). `New-HomelabSite` initializes a layered gitignore: `.gitignore.upstream` tracks this package, `.gitignore.custom` holds **only** site extras, and `.gitignore` is generated from both (do not edit it). `Update-HomelabUpstream` refreshes the upstream layer, so custom rules survive product updates. Commits and pushes `data/`, `docker-compose.apps.yml`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge. On a real conflict it keeps the remote file as canonical and saves the local copy next to it:
+Site instances only (`data/` is versioned). `New-HomelabSite` initializes a layered gitignore: `.gitignore.upstream` tracks this package, `.gitignore.custom` holds **only** site extras, and `.gitignore` is generated from both (do not edit it). `Update-HomelabUpstream` refreshes the upstream layer, so custom rules survive product updates. Commits and pushes `data/`, `docker-compose.apps.yml`, `overrides/`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge.
+
+For `data/hub/platform.db` and `data/pkm/pkm.db`, Backup/Pull run a three-way SQLite row merge (`Merge-SqliteGitConflict.py`): rows present on only one side are kept; when the same row changed on both sides, the later `updated_at` (or equivalent timestamp) wins. FTS, locks, and runtime state are not merged; PKM rebuilds them on reindex. The merged file replaces the canonical db only after integrity and foreign-key checks. If Python or the helper is missing, or schemas differ, the conservative fallback applies: remote stays canonical and the local copy is saved next to it:
 
 ```text
 filename.local-conflict.HOSTNAME.20260820-143000.md

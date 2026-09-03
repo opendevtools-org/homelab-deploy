@@ -9,7 +9,8 @@ set -euo pipefail
 NOTIFY_WEBHOOK_URL="${HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL:-}"
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTIFICATION_LOG="${HOMELAB_PULL_LOG:-$SCRIPT_ROOT/logs/pull-data-git.log}"
-BACKUP_PATHS=(data docker-compose.apps.yml README.md)
+BACKUP_PATHS=(data docker-compose.apps.yml README.md overrides)
+SQLITE_MERGE_HELPER="$SCRIPT_ROOT/Merge-SqliteGitConflict.py"
 EXCLUDE_PATHSPEC=':(exclude)data/pkm/scripts/**/.uploads/**'
 GIT_AUTH_ARGS=()
 HOST_ID="$(hostname 2>/dev/null || printf 'unknown-host')"
@@ -115,6 +116,56 @@ git_auth() {
   git "${GIT_AUTH_ARGS[@]}" "$@"
 }
 
+merge_sqlite_conflict() {
+  local path="$1"
+  local database_type temp_dir summary py
+
+  case "$path" in
+    data/hub/platform.db) database_type="platform" ;;
+    data/pkm/pkm.db) database_type="pkm" ;;
+    *) return 1 ;;
+  esac
+
+  if command -v python3 >/dev/null 2>&1; then
+    py=python3
+  elif command -v python >/dev/null 2>&1; then
+    py=python
+  else
+    notify "WARN" "SQLite merge unavailable for ${path}; python3 and Merge-SqliteGitConflict.py are required."
+    return 1
+  fi
+  if [[ ! -f "$SQLITE_MERGE_HELPER" ]]; then
+    notify "WARN" "SQLite merge unavailable for ${path}; python3 and Merge-SqliteGitConflict.py are required."
+    return 1
+  fi
+
+  temp_dir="$(mktemp -d "${TMPDIR:-/tmp}/homelab-sqlite-merge.XXXXXX")"
+  if ! git show ":1:${path}" >"$temp_dir/base.db" \
+    || ! git show ":2:${path}" >"$temp_dir/local.db" \
+    || ! git show ":3:${path}" >"$temp_dir/remote.db"; then
+    rm -rf -- "$temp_dir"
+    notify "WARN" "SQLite merge skipped for ${path}: the Git base, local, or remote version is missing."
+    return 1
+  fi
+
+  if summary="$("$py" "$SQLITE_MERGE_HELPER" \
+    --type "$database_type" \
+    --base "$temp_dir/base.db" \
+    --local "$temp_dir/local.db" \
+    --remote "$temp_dir/remote.db" \
+    --output "$temp_dir/merged.db" 2>&1)"; then
+    cp -- "$temp_dir/merged.db" "$path"
+    git add -- "$path"
+    rm -rf -- "$temp_dir"
+    notify "INFO" "Conflict in ${path}: SQLite rows merged successfully (${summary})."
+    return 0
+  fi
+
+  rm -rf -- "$temp_dir"
+  notify "WARN" "SQLite merge failed for ${path}: ${summary}"
+  return 1
+}
+
 conflict_archive_path() {
   local path="$1"
   local dir base stem ext candidate counter
@@ -159,13 +210,17 @@ resolve_conflicts_with_remote() {
   fi
 
   for path in "${conflicted_paths[@]}"; do
+    if merge_sqlite_conflict "$path"; then
+      continue
+    fi
+
     archive="$(conflict_archive_path "$path")"
     archive_dir="$(dirname "$archive")"
 
     if git checkout --ours -- "$path" 2>/dev/null && [[ -e "$path" ]]; then
       mkdir -p "$archive_dir"
       cp -a -- "$path" "$archive"
-      git add -- "$archive"
+      git add -f -- "$archive"
       notify "INFO" "Conflict in ${path}: local version saved as ${archive}; remote version kept as canonical."
     else
       notify "INFO" "Conflict in ${path}: no local file version could be archived; remote version kept as canonical."

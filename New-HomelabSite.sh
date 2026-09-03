@@ -277,6 +277,18 @@ else
   printf '%s\n' '# Optional services for this host.' 'services: {}' >"$TARGET_DIR/docker-compose.apps.yml"
 fi
 
+mkdir -p \
+  "$TARGET_DIR/overrides/hub-platform" \
+  "$TARGET_DIR/overrides/pkm-backend" \
+  "$TARGET_DIR/overrides/hub-frontend" \
+  "$TARGET_DIR/overrides/pkm-frontend"
+if [[ -d "$BAK/overrides" ]]; then
+  cp -a "$BAK/overrides/." "$TARGET_DIR/overrides/"
+fi
+if [[ -f "$TARGET_DIR/upstream/overrides/README.md" && ! -f "$TARGET_DIR/overrides/README.md" ]]; then
+  cp -a "$TARGET_DIR/upstream/overrides/README.md" "$TARGET_DIR/overrides/README.md"
+fi
+
 [[ -f "$TARGET_DIR/upstream/.env.example" ]] && cp -a "$TARGET_DIR/upstream/.env.example" "$TARGET_DIR/.env.example"
 
 write_layered_gitignore "$TARGET_DIR/upstream/.gitignore" "$TARGET_DIR" "$BAK"
@@ -288,6 +300,7 @@ cat >"$TARGET_DIR/README.md" <<EOF
 - \`data/\` — volumes
 - \`docker-compose.config.yml\` — one-time PKM data ownership
 - \`docker-compose.apps.yml\` — extra services
+- \`overrides/\` — optional code patches (see \`overrides/README.md\`)
 - \`.env\` — secrets (not committed)
 - \`.gitignore\` — generated; edit \`.gitignore.custom\` for site extras
 - \`Update-HomelabUpstream.*\` — pull product updates
@@ -347,6 +360,7 @@ for s in \
   Pull-DataGit.sh Pull-DataGit.ps1 \
   Register-DataGitPull.sh Register-DataGitPullTask.ps1 \
   Reindex-PkmFromDisk.sh Reindex-PkmFromDisk.ps1 \
+  Merge-SqliteGitConflict.py \
   docker-compose.config.yml docker-compose.https.yml Caddyfile
 do
   if [[ -f "$TARGET_DIR/upstream/$s" ]]; then

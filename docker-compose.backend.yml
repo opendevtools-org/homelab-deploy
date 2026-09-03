@@ -38,9 +38,12 @@ services:
       HUB_MARKET_CATALOG_TTL_SEC: ${HUB_MARKET_CATALOG_TTL_SEC:-600}
       HUB_MARKET_PRIVATE_PATH: ${HUB_MARKET_PRIVATE_PATH:-}
       HUB_MARKET_PLUGINS_DIR: /market-plugins
+      # Drop sitecustomize.py in ./overrides/hub-platform to patch Platform without rebuilding.
+      PYTHONPATH: /overrides
     volumes:
       - ./data/hub:/data
       - ${HUB_MARKET_PLUGINS_HOST:-./.market-plugins-local}:/market-plugins:ro
+      - ./overrides/hub-platform:/overrides:ro
       - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -53,8 +56,10 @@ services:
     restart: unless-stopped
     volumes:
       - ./data/pkm:/app/data
+      - ./overrides/pkm-backend:/overrides:ro
     environment:
       DATA_DIR: /app/data
+      PYTHONPATH: /overrides
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}

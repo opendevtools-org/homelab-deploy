@@ -22,6 +22,8 @@ services:
     environment:
       HUB_API_UPSTREAM: http://hub-platform:8090
       NGINX_ENVSUBST_FILTER: ^HUB_API_UPSTREAM$
+    volumes:
+      - ./overrides/hub-frontend:/overrides:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -33,5 +35,7 @@ services:
     environment:
       PKM_API_UPSTREAM: http://pkm-backend:8000
       NGINX_ENVSUBST_FILTER: ^PKM_API_UPSTREAM$
+    volumes:
+      - ./overrides/pkm-frontend:/overrides:ro
     extra_hosts:
       - "host.docker.internal:host-gateway"

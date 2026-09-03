@@ -1,6 +1,10 @@
 # Optional extra BACKENDS for this host. Empty by default — add your own here.
 # Always included with the base backend compose (see README).
 #
+# Code patches (no image rebuild): drop files in ./overrides/<service>/ instead.
+# See overrides/README.md. Use this file for extra services or to bind-mount a
+# specific module over /app/app/foo.py when sitecustomize is not enough.
+#
 # Community market: Hub copies a command that downloads
 # plugins/<id>/docker-compose.backend.yml and appends it under include
 # (project_directory: . so bind mounts use this folder).

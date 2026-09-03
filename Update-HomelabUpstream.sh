@@ -73,6 +73,7 @@ LAUNCHERS=(
   Register-DataGitPullTask.ps1
   Reindex-PkmFromDisk.sh
   Reindex-PkmFromDisk.ps1
+  Merge-SqliteGitConflict.py
   docker-compose.config.yml
   docker-compose.https.yml
   Caddyfile

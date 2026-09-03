@@ -345,6 +345,7 @@ if (-not $alreadySite) {
     "Register-DataGitPull.sh",
     "Reindex-PkmFromDisk.ps1",
     "Reindex-PkmFromDisk.sh",
+    "Merge-SqliteGitConflict.py",
     "docker-compose.config.yml"
   )
   foreach ($f in $productFiles) {
@@ -463,6 +464,24 @@ services: {}
 "@
 }
 
+@(
+  "hub-platform",
+  "pkm-backend",
+  "hub-frontend",
+  "pkm-frontend"
+) | ForEach-Object {
+  New-Item -ItemType Directory -Force -Path (Join-Path $TargetDir "overrides\$_") | Out-Null
+}
+if (Test-Path (Join-Path $bak "overrides")) {
+  robocopy (Join-Path $bak "overrides") (Join-Path $TargetDir "overrides") /E /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+  if ($LASTEXITCODE -ge 8) { throw ("robocopy overrides restore failed (exit {0})" -f $LASTEXITCODE) }
+}
+$upstreamOverrideReadme = Join-Path $TargetDir "upstream\overrides\README.md"
+$siteOverrideReadme = Join-Path $TargetDir "overrides\README.md"
+if ((Test-Path $upstreamOverrideReadme) -and -not (Test-Path $siteOverrideReadme)) {
+  Copy-Item $upstreamOverrideReadme $siteOverrideReadme -Force
+}
+
 if (Test-Path (Join-Path $TargetDir "upstream\.env.example")) {
   Copy-Item (Join-Path $TargetDir "upstream\.env.example") (Join-Path $TargetDir ".env.example") -Force
 }
@@ -485,6 +504,7 @@ Converted from a flat ``homelab-deploy`` install.
 - ``data/`` — your Hub + PKM volumes
 - ``docker-compose.config.yml`` — one-time PKM data ownership
 - ``docker-compose.apps.yml`` — your extra services
+- ``overrides/`` — optional code patches (see ``overrides/README.md``)
 - ``.env`` — secrets (not committed)
 - ``.gitignore`` — generated; edit ``.gitignore.custom`` for site extras
 - ``Update-HomelabUpstream.ps1`` / ``.sh`` — pull product updates
@@ -558,6 +578,7 @@ foreach ($name in @(
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",
   "Reindex-PkmFromDisk.sh",
+  "Merge-SqliteGitConflict.py",
   "docker-compose.config.yml",
   "docker-compose.https.yml",
   "Caddyfile"

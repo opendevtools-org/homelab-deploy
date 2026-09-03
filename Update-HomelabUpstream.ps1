@@ -210,6 +210,7 @@ $launcherNames = @(
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",
   "Reindex-PkmFromDisk.sh",
+  "Merge-SqliteGitConflict.py",
   "docker-compose.config.yml",
   "docker-compose.https.yml",
   "Caddyfile"
