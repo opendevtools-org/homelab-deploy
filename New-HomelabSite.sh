@@ -361,6 +361,7 @@ for s in \
   Register-DataGitPull.sh Register-DataGitPullTask.ps1 \
   Reindex-PkmFromDisk.sh Reindex-PkmFromDisk.ps1 \
   Merge-SqliteGitConflict.py \
+  Normalize-PkmDuplicatePaths.py \
   docker-compose.config.yml docker-compose.https.yml Caddyfile
 do
   if [[ -f "$TARGET_DIR/upstream/$s" ]]; then

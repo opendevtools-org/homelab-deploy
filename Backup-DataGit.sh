@@ -85,6 +85,19 @@ reindex_pkm_after_sync() {
   notify "INFO" "PKM imported pages, files, PDFs, and bookmarks from disk."
 }
 
+restore_pkm_data_ownership() {
+  local owner="${PUID:-1000}:${PGID:-1000}"
+  local data_dir="$REPO_ROOT/data/pkm"
+
+  [[ -d "$data_dir" ]] || return 0
+  mkdir -p "$data_dir/bookmarks"
+  if [[ "$(id -u)" -ne 0 ]]; then
+    notify "WARN" "PKM data ownership was not reset (script is not running as root). If pkm-backend hits PermissionError, chown ${owner} on data/pkm."
+    return 0
+  fi
+  chown -R "$owner" "$data_dir"
+}
+
 build_git_auth_args() {
   local origin_url username auth_token auth_raw auth_b64
 
@@ -272,4 +285,5 @@ fi
 git_auth push origin "$BRANCH"
 
 notify "INFO" "Backup/sync of data/, docker-compose.apps.yml, and README.md completed on branch '${BRANCH}'."
+restore_pkm_data_ownership
 reindex_pkm_after_sync

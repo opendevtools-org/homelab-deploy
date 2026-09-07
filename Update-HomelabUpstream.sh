@@ -74,6 +74,7 @@ LAUNCHERS=(
   Reindex-PkmFromDisk.sh
   Reindex-PkmFromDisk.ps1
   Merge-SqliteGitConflict.py
+  Normalize-PkmDuplicatePaths.py
   docker-compose.config.yml
   docker-compose.https.yml
   Caddyfile

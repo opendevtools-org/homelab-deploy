@@ -23,7 +23,9 @@ $ErrorActionPreference = "Stop"
 $backupPaths = @("data", "docker-compose.apps.yml", "README.md", "overrides")
 $excludePathspec = ":(exclude)data/pkm/scripts/**/.uploads/**"
 $sqliteMergeHelper = Join-Path $PSScriptRoot "Merge-SqliteGitConflict.py"
+$pkmDupHelper = Join-Path $PSScriptRoot "Normalize-PkmDuplicatePaths.py"
 $script:gitExtraArgs = @()
+$script:pkmPositionSnapshot = $null
 $script:hostId = ([System.Net.Dns]::GetHostName() -replace '[^A-Za-z0-9._-]', '-')
 if ([string]::IsNullOrWhiteSpace($script:hostId)) { $script:hostId = "unknown-host" }
 $script:conflictTimestamp = Get-Date -Format "yyyyMMdd-HHmmss"
@@ -357,6 +359,71 @@ function Send-Notification {
   }
 }
 
+function Get-Python {
+  foreach ($name in @("python3", "python")) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+  }
+  return $null
+}
+
+function Invoke-PkmDupHelper {
+  param([string[]]$HelperArgs)
+  if (-not (Test-Path $pkmDupHelper)) { return $null }
+  $py = Get-Python
+  if (-not $py) { return $null }
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $output = & $py $pkmDupHelper @HelperArgs 2>&1
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+  if ($code -ne 0) { return $null }
+  return ($output | Out-String).Trim()
+}
+
+function Save-PkmPositions {
+  $db = Join-Path $repoRoot "data\pkm\pkm.db"
+  $script:pkmPositionSnapshot = $null
+  if (-not (Test-Path $db)) { return }
+  $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("homelab-pkm-positions-{0}.json" -f [guid]::NewGuid().ToString("n"))
+  $out = Invoke-PkmDupHelper -HelperArgs @("snapshot", "--db", $db, "--out", $tmp)
+  if ($null -eq $out) {
+    if (Test-Path $tmp) { Remove-Item $tmp -Force }
+    return
+  }
+  $script:pkmPositionSnapshot = $tmp
+}
+
+function Repair-PkmDuplicatePaths {
+  $docs = Join-Path $repoRoot "data\pkm\docs"
+  if (-not (Test-Path $docs)) { return }
+  $text = Invoke-PkmDupHelper -HelperArgs @(
+    "apply-fs", "--docs", $docs, "--repo", $repoRoot,
+    "--host", $script:hostId, "--stamp", $script:conflictTimestamp
+  )
+  if ([string]::IsNullOrWhiteSpace($text)) { return }
+  foreach ($line in ($text -split "`r?`n")) {
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    $level = if ($line -match "^(Duplicate|Conflicting)") { "WARN" } else { "INFO" }
+    Send-Notification -Level $level -Message $line
+  }
+}
+
+function Restore-PkmPositions {
+  $db = Join-Path $repoRoot "data\pkm\pkm.db"
+  if ([string]::IsNullOrWhiteSpace($script:pkmPositionSnapshot) -or -not (Test-Path $script:pkmPositionSnapshot)) {
+    return
+  }
+  $out = Invoke-PkmDupHelper -HelperArgs @("restore", "--db", $db, "--from-json", $script:pkmPositionSnapshot)
+  Remove-Item $script:pkmPositionSnapshot -Force -ErrorAction SilentlyContinue
+  $script:pkmPositionSnapshot = $null
+  if ([string]::IsNullOrWhiteSpace($out) -or $out -match "^restored 0 ") { return }
+  Send-Notification -Level "INFO" -Message "Restored PKM page ordering after automatic merge."
+  $container = [Environment]::GetEnvironmentVariable("HOMELAB_PKM_CONTAINER")
+  if ([string]::IsNullOrWhiteSpace($container)) { $container = "pkm-backend" }
+  docker restart $container 2>$null | Out-Null
+}
+
 function Invoke-PkmDiskReindex {
   $helper = Join-Path $repoRoot "Reindex-PkmFromDisk.ps1"
   if (-not (Test-Path $helper)) {
@@ -407,8 +474,11 @@ try {
     throw "Detached HEAD is not supported for automatic pulls."
   }
 
+  Save-PkmPositions
   Commit-LocalChanges
   Sync-WithOrigin -Branch $branch
+  Repair-PkmDuplicatePaths
+  Commit-LocalChanges
   Invoke-Git push origin $branch | Out-Null
   Invoke-Git submodule update --init --recursive | Out-Null
 
@@ -416,6 +486,7 @@ try {
   Write-Host $ok
   Send-Notification -Level "INFO" -Message $ok
   Invoke-PkmDiskReindex
+  Restore-PkmPositions
 } catch {
   $err = "Pull failed: {0}" -f $_.Exception.Message
   Send-Notification -Level "ERROR" -Message $err

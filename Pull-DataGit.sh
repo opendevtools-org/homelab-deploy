@@ -11,12 +11,14 @@ SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTIFICATION_LOG="${HOMELAB_PULL_LOG:-$SCRIPT_ROOT/logs/pull-data-git.log}"
 BACKUP_PATHS=(data docker-compose.apps.yml README.md overrides)
 SQLITE_MERGE_HELPER="$SCRIPT_ROOT/Merge-SqliteGitConflict.py"
+PKM_DUP_HELPER="$SCRIPT_ROOT/Normalize-PkmDuplicatePaths.py"
 EXCLUDE_PATHSPEC=':(exclude)data/pkm/scripts/**/.uploads/**'
 GIT_AUTH_ARGS=()
 HOST_ID="$(hostname 2>/dev/null || printf 'unknown-host')"
 HOST_ID="${HOST_ID//[^A-Za-z0-9._-]/-}"
 [[ -n "$HOST_ID" ]] || HOST_ID="unknown-host"
 CONFLICT_TIMESTAMP="$(date '+%Y%m%d-%H%M%S')"
+PKM_POSITION_SNAPSHOT=""
 
 export_env_file() {
   local env_file="$1"
@@ -62,6 +64,58 @@ die() {
   exit 1
 }
 
+pkm_dup_py() {
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$PKM_DUP_HELPER" "$@"
+  elif command -v python >/dev/null 2>&1; then
+    python "$PKM_DUP_HELPER" "$@"
+  else
+    return 1
+  fi
+}
+
+snapshot_pkm_positions() {
+  local db="$REPO_ROOT/data/pkm/pkm.db"
+  PKM_POSITION_SNAPSHOT=""
+  [[ -f "$PKM_DUP_HELPER" && -f "$db" ]] || return 0
+  command -v python3 >/dev/null 2>&1 || command -v python >/dev/null 2>&1 || return 0
+  PKM_POSITION_SNAPSHOT="$(mktemp "${TMPDIR:-/tmp}/homelab-pkm-positions.XXXXXX.json")"
+  pkm_dup_py snapshot --db "$db" --out "$PKM_POSITION_SNAPSHOT" >/dev/null || {
+    rm -f -- "$PKM_POSITION_SNAPSHOT"
+    PKM_POSITION_SNAPSHOT=""
+  }
+}
+
+normalize_numbered_doc_directories() {
+  local docs_root="$REPO_ROOT/data/pkm/docs"
+  local line
+  [[ -f "$PKM_DUP_HELPER" && -d "$docs_root" ]] || return 0
+  while IFS= read -r line; do
+    [[ -n "$line" ]] || continue
+    if [[ "$line" == Duplicate* || "$line" == Conflicting* ]]; then
+      notify "WARN" "$line"
+    else
+      notify "INFO" "$line"
+    fi
+  done < <(pkm_dup_py apply-fs --docs "$docs_root" --repo "$REPO_ROOT" --host "$HOST_ID" --stamp "$CONFLICT_TIMESTAMP" || true)
+}
+
+restore_pkm_positions() {
+  local db="$REPO_ROOT/data/pkm/pkm.db"
+  local out
+  [[ -s "$PKM_POSITION_SNAPSHOT" && -f "$db" && -f "$PKM_DUP_HELPER" ]] || {
+    rm -f -- "$PKM_POSITION_SNAPSHOT"
+    PKM_POSITION_SNAPSHOT=""
+    return 0
+  }
+  out="$(pkm_dup_py restore --db "$db" --from-json "$PKM_POSITION_SNAPSHOT" || true)"
+  rm -f -- "$PKM_POSITION_SNAPSHOT"
+  PKM_POSITION_SNAPSHOT=""
+  [[ "$out" == restored\ 0\ * || -z "$out" ]] && return 0
+  notify "INFO" "Restored PKM page ordering after automatic merge."
+  docker restart "${HOMELAB_PKM_CONTAINER:-pkm-backend}" >/dev/null 2>&1 || true
+}
+
 reindex_pkm_after_sync() {
   local helper="$SCRIPT_ROOT/Reindex-PkmFromDisk.sh"
   local out code
@@ -84,6 +138,19 @@ reindex_pkm_after_sync() {
     return 0
   fi
   notify "INFO" "PKM imported pages, files, PDFs, and bookmarks from disk."
+}
+
+restore_pkm_data_ownership() {
+  local owner="${PUID:-1000}:${PGID:-1000}"
+  local data_dir="$REPO_ROOT/data/pkm"
+
+  [[ -d "$data_dir" ]] || return 0
+  mkdir -p "$data_dir/bookmarks"
+  if [[ "$(id -u)" -ne 0 ]]; then
+    notify "WARN" "PKM data ownership was not reset (script is not running as root). If pkm-backend hits PermissionError, chown ${owner} on data/pkm."
+    return 0
+  fi
+  chown -R "$owner" "$data_dir"
 }
 
 build_git_auth_args() {
@@ -265,14 +332,19 @@ export_env_file "$REPO_ROOT/.env"
 
 cd "$REPO_ROOT"
 build_git_auth_args
+snapshot_pkm_positions
 
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 [[ -n "$BRANCH" && "$BRANCH" != "HEAD" ]] || die "Detached HEAD is not supported for automatic pulls."
 
 commit_local_changes
 sync_with_origin
+normalize_numbered_doc_directories
+commit_local_changes
 git_auth push origin "$BRANCH" || die "git push origin $BRANCH failed. Run the script again after checking the network/remote status."
 git submodule update --init --recursive || die "git submodule update failed."
 
 notify "INFO" "Pull/sync completed with origin/${BRANCH}."
+restore_pkm_data_ownership
 reindex_pkm_after_sync
+restore_pkm_positions

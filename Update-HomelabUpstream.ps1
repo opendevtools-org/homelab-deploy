@@ -211,6 +211,7 @@ $launcherNames = @(
   "Reindex-PkmFromDisk.ps1",
   "Reindex-PkmFromDisk.sh",
   "Merge-SqliteGitConflict.py",
+  "Normalize-PkmDuplicatePaths.py",
   "docker-compose.config.yml",
   "docker-compose.https.yml",
   "Caddyfile"

@@ -282,7 +282,9 @@ If both machines can receive edits, schedule Git on both:
 
 The standby pull first commits local changes in `data/`, `docker-compose.apps.yml`, and `README.md`, then syncs with `origin` and pushes. Edits made on either server reach the other on the next run.
 
-After a successful Backup or Pull, the scripts restart the `pkm-backend` container and call the same APIs as **Import from disk** / **Sync from disk** in the UI (pages, files, PDFs, bookmarks). PKM is down for a few seconds during the restart. Skip with `HOMELAB_PKM_REINDEX_AFTER_SYNC=false` in `.env`, or run `./Reindex-PkmFromDisk.sh` / `.\Reindex-PkmFromDisk.ps1` by itself.
+After the Git sync, `Pull-DataGit` also collapses generic PKM duplicates created when two trees meet: a folder or page named `name-1` next to `name` (Finder/Explorer/Git copy suffix). The canonical name is kept; differing files are archived as `*.local-conflict.*`. Page order (`pages.position`) is snapshotted before the pull and reapplied to the canonical paths after reindex. Names like `ubuntu-22` are left alone (`-1` only).
+
+After a successful Backup or Pull, Linux hosts that run the scripts as root reset `data/pkm` to `PUID`/`PGID` (default `1000:1000`) so the API container can write `bookmarks/` after Git checkout. Then the scripts restart the `pkm-backend` container and call the same APIs as **Import from disk** / **Sync from disk** in the UI (pages, files, PDFs, bookmarks). PKM is down for a few seconds during the restart. Skip with `HOMELAB_PKM_REINDEX_AFTER_SYNC=false` in `.env`, or run `./Reindex-PkmFromDisk.sh` / `.\Reindex-PkmFromDisk.ps1` by itself.
 
 ```powershell
 .\Register-DataGitPullTask.ps1 -Time 00:10
@@ -315,3 +317,7 @@ While in test/dev, publish overwrites only `:latest` (`HOMELAB_VERSION` / `PKM_V
 ## License
 
 OpenDevTools End-User License — internal run/review; no redistribution of images or reuse of the implementation without agreement.
+
+## Site dump → generic product
+
+If a running site was patched by hand, drop the dump in gitignored `sugestions/` and run the agent prompt in [`EXTRACT-SITE-DUMP.md`](./EXTRACT-SITE-DUMP.md). Do not merge the dump tree as-is.
