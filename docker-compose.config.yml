@@ -28,6 +28,7 @@ services:
       - -c
       - |
         owner="$${PUID:-1000}:$${PGID:-1000}"
+        mkdir -p /data/bookmarks
         marker=/data/.permissions-owner
         marked=$$(tr -d '\r' < "$$marker" 2>/dev/null || true)
         if [ "$$marked" = "$$owner" ]; then

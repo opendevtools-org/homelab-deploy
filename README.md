@@ -210,6 +210,16 @@ docker compose --project-directory . \
 
 `--project-directory .` so volumes hit this folder’s `data/`.
 
+First start on a new host:
+
+1. `git submodule update --init --recursive upstream` (required: base compose lives in `upstream/`).
+2. Copy `.env.example` to `.env` and set `PLATFORM_SERVICE_TOKEN`, `HUB_JWT_SECRET`, and `JWT_SECRET`.
+3. If Compose reports a container name conflict (`home-hub`, `pkm-backend`, `pkm-frontend`), remove the leftover containers, then `up` again.
+4. If `pkm-backend` restarts with a permission error on `/app/data/bookmarks`, the data dir is not owned by `PUID`/`PGID`. Recreate with `docker-compose.config.yml` included, or `chown -R 1000:1000 data/pkm` on a Linux host (use the same ids as `.env`).
+5. From other machines, set `PUBLIC_PKM_URL` to the server IP or hostname, not `127.0.0.1`. For clipboard paste of images, use the LAN HTTPS overlay below.
+
+Do not bind-mount whole Platform `main.py` / `config.py` into `docker-compose.apps.yml`. Prefer a new image (`HOMELAB_VERSION` / `PKM_VERSION`) or a small `overrides/*/sitecustomize.py` / `default.conf`.
+
 ### Update product — `Update-HomelabUpstream`
 
 No flags: only `git pull` in `upstream/`.
