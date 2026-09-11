@@ -13,3 +13,6 @@ upstream/data/
 logs/
 data/pkm/scripts/**/.uploads/
 *.local-conflict.*
+cli/**/__pycache__/
+cli/**/.pytest_cache/
+scriptkit/**/__pycache__/

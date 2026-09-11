@@ -1,0 +1,22 @@
+# Extends the published PKM API image with extra packages for site CLIs.
+# Copy this file to Dockerfile in the same folder (Update-HomelabUpstream
+# refreshes *.example only; it never overwrites Dockerfile).
+#
+# Base image is Debian slim. Recreate with --build after edits.
+
+ARG PKM_VERSION=latest
+FROM ghcr.io/opendevtools-org/pkm-backend:${PKM_VERSION}
+
+USER root
+
+# Example: Java + Maven for in-container builds. Uncomment what you need.
+# RUN apt-get update \
+#     && apt-get install -y --no-install-recommends \
+#         openjdk-21-jdk-headless \
+#         maven \
+#     && rm -rf /var/lib/apt/lists/*
+#
+# ENV JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+# ENV PATH="${JAVA_HOME}/bin:${PATH}"
+
+# Compose sets user: PUID:PGID. Leave the image as root so that still works.

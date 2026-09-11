@@ -1,0 +1,31 @@
+# Site Hub/PKM overlay examples. Copy snippets into docker-compose.custom.yml
+# (that file is site-owned and is never overwritten by Update-HomelabUpstream).
+#
+# Extra OS packages: copy docker/pkm-backend/Dockerfile.example to Dockerfile,
+# uncomment the RUN lines, then use the pkm-backend build: block below.
+# Named volumes site-cli-cache / site-cli-home are declared and chowned in
+# docker-compose.config.yml. This file only mounts them.
+#
+# Recreate after edits:
+#   docker compose --project-directory . \
+#     -f upstream/docker-compose.backend.yml -f upstream/docker-compose.lan.yml \
+#     -f docker-compose.config.yml -f docker-compose.custom.yml \
+#     -f docker-compose.apps.yml up -d --build
+
+services:
+  pkm-backend:
+    build:
+      context: ./docker/pkm-backend
+      args:
+        PKM_VERSION: ${PKM_VERSION:-latest}
+    image: pkm-backend-site:${PKM_VERSION:-latest}
+    pull_policy: build
+    volumes:
+      - "site-cli-cache:/app/cache"
+      - "site-cli-home:/app/home"
+      - ./cli:/app/cli:ro
+      - ./scriptkit:/app/scriptkit:ro
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app/scriptkit:/overrides
+      HOME: /app/home

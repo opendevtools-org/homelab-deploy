@@ -18,7 +18,7 @@ export_env_file() {
 NOTIFY_WEBHOOK_URL="${HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL:-}"
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTIFICATION_LOG="${HOMELAB_BACKUP_LOG:-$SCRIPT_ROOT/logs/backup-data-git.log}"
-BACKUP_PATHS=(data docker-compose.apps.yml README.md overrides)
+BACKUP_PATHS=(data docker-compose.custom.yml docker-compose.apps.yml README.md overrides)
 SQLITE_MERGE_HELPER="$SCRIPT_ROOT/Merge-SqliteGitConflict.py"
 GIT_AUTH_ARGS=()
 HOST_ID="$(hostname 2>/dev/null || printf 'unknown-host')"
@@ -272,7 +272,7 @@ if [[ -n "$(git diff --cached --name-only -- "${BACKUP_PATHS[@]}")" ]]; then
   TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
   git commit -m "backup(site): ${TIMESTAMP}"
 else
-  notify "INFO" "No changes in backup paths (data/, docker-compose.apps.yml, README.md). Continuing with remote sync."
+  notify "INFO" "No changes in backup paths (data/, docker-compose.custom.yml, docker-compose.apps.yml, README.md). Continuing with remote sync."
 fi
 
 if ! git_auth pull --rebase --autostash origin "$BRANCH"; then
@@ -284,6 +284,6 @@ fi
 
 git_auth push origin "$BRANCH"
 
-notify "INFO" "Backup/sync of data/, docker-compose.apps.yml, and README.md completed on branch '${BRANCH}'."
+notify "INFO" "Backup/sync of data/, docker-compose.custom.yml, docker-compose.apps.yml, and README.md completed on branch '${BRANCH}'."
 restore_pkm_data_ownership
 reindex_pkm_after_sync

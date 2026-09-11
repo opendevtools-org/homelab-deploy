@@ -9,7 +9,8 @@
     ./data/                     # your volumes (kept)
     ./.env                      # your secrets (kept, never committed)
     ./docker-compose.config.yml # one-time PKM data ownership
-    ./docker-compose.apps.yml   # your apps overlay
+    ./docker-compose.custom.yml  # Hub/PKM image overlay
+    ./docker-compose.apps.yml   # extra apps / Market plugins
     ./.gitignore                # generated from .gitignore.upstream + .gitignore.custom
     ./README.md
 
@@ -288,9 +289,21 @@ if (Test-Path $dataSrc) {
   robocopy $dataSrc (Join-Path $bak "data") /E /XD .git /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
   if ($LASTEXITCODE -ge 8) { throw ("robocopy data backup failed (exit {0})" -f $LASTEXITCODE) }
 }
-foreach ($name in @(".env", "docker-compose.apps.yml", ".env.example", ".gitignore", ".gitignore.custom")) {
+foreach ($name in @(".env", "docker-compose.custom.yml", "docker-compose.apps.yml", ".env.example", ".gitignore", ".gitignore.custom")) {
   $p = Join-Path $TargetDir $name
   if (Test-Path $p) { Copy-Item $p (Join-Path $bak $name) -Force }
+}
+foreach ($dir in @("docker", "cli")) {
+  $p = Join-Path $TargetDir $dir
+  if (Test-Path $p) {
+    robocopy $p (Join-Path $bak $dir) /E /XD .git /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+    if ($LASTEXITCODE -ge 8) { throw ("robocopy {0} backup failed (exit {1})" -f $dir, $LASTEXITCODE) }
+  }
+}
+$siteNotes = Join-Path $TargetDir "agent-context\site"
+if (Test-Path $siteNotes) {
+  robocopy $siteNotes (Join-Path $bak "agent-context\site") /E /XD .git /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+  if ($LASTEXITCODE -ge 8) { throw ("robocopy agent-context/site backup failed (exit {0})" -f $LASTEXITCODE) }
 }
 
 Set-Location $TargetDir
@@ -329,6 +342,8 @@ if (-not $alreadySite) {
     "docker-compose.https.yml",
     "Caddyfile",
     "docker-compose.apps.example.yml",
+    "docker-compose.custom.yml",
+    "docker-compose.custom.example.yml",
     "LICENSE",
     "README.md",
     "New-HomelabSite.ps1",
@@ -347,7 +362,9 @@ if (-not $alreadySite) {
     "Reindex-PkmFromDisk.sh",
     "Merge-SqliteGitConflict.py",
     "Normalize-PkmDuplicatePaths.py",
-    "docker-compose.config.yml"
+    "docker-compose.config.yml",
+    "Refresh-SiteProductTrees.sh",
+    "Refresh-SiteProductTrees.ps1"
   )
   foreach ($f in $productFiles) {
     $p = Join-Path $TargetDir $f
@@ -460,7 +477,17 @@ if (Test-Path (Join-Path $bak "docker-compose.apps.yml")) {
   Copy-Item (Join-Path $TargetDir "upstream\docker-compose.apps.yml") (Join-Path $TargetDir "docker-compose.apps.yml") -Force
 } else {
   Write-Utf8NoBom (Join-Path $TargetDir "docker-compose.apps.yml") @"
-# Optional services for this host.
+# Optional extra backends for this host.
+services: {}
+"@
+}
+if (Test-Path (Join-Path $bak "docker-compose.custom.yml")) {
+  Copy-Item (Join-Path $bak "docker-compose.custom.yml") (Join-Path $TargetDir "docker-compose.custom.yml") -Force
+} elseif (Test-Path (Join-Path $TargetDir "upstream\docker-compose.custom.yml")) {
+  Copy-Item (Join-Path $TargetDir "upstream\docker-compose.custom.yml") (Join-Path $TargetDir "docker-compose.custom.yml") -Force
+} else {
+  Write-Utf8NoBom (Join-Path $TargetDir "docker-compose.custom.yml") @"
+# Site Hub/PKM overlay.
 services: {}
 "@
 }
@@ -503,8 +530,13 @@ Converted from a flat ``homelab-deploy`` install.
 
 - ``upstream/`` — git submodule ($UpstreamUrl) — product package
 - ``data/`` — your Hub + PKM volumes
-- ``docker-compose.config.yml`` — one-time PKM data ownership
-- ``docker-compose.apps.yml`` — your extra services
+- ``docker-compose.config.yml`` — one-shot ownership (``data/pkm`` + CLI volumes)
+- ``docker-compose.custom.yml`` — Hub/PKM image + cli mounts (site-owned)
+- ``docker-compose.apps.yml`` — extra apps / Market plugins (site-owned)
+- ``docker/`` — optional site Dockerfile (FROM published images)
+- ``cli/`` — site CLIs (not overwritten on product update)
+- ``scriptkit/`` — Python library for PKM launchers (refreshed from upstream)
+- ``agent-context/`` — Hub/PKM notes for agents; extras in ``agent-context/site/``
 - ``overrides/`` — optional code patches (see ``overrides/README.md``)
 - ``.env`` — secrets (not committed)
 - ``.gitignore`` — generated; edit ``.gitignore.custom`` for site extras
@@ -522,6 +554,7 @@ docker compose --project-directory . \\
   -f upstream/docker-compose.backend.yml \\
   -f upstream/$portsFile \\
   -f docker-compose.config.yml \\
+  -f docker-compose.custom.yml \\
   -f docker-compose.apps.yml up -d
 docker compose --project-directory . \\
   -f upstream/docker-compose.frontend.yml \\
@@ -593,6 +626,35 @@ foreach ($name in @(
   }
 }
 
+$refreshHelper = Join-Path $TargetDir "upstream\Refresh-SiteProductTrees.ps1"
+if (Test-Path -LiteralPath $refreshHelper) {
+  & $refreshHelper -Upstream (Join-Path $TargetDir "upstream") -SiteRoot $TargetDir
+}
+$bakCli = Join-Path $bak "cli"
+if (Test-Path -LiteralPath $bakCli) {
+  New-Item -ItemType Directory -Path (Join-Path $TargetDir "cli") -Force | Out-Null
+  robocopy $bakCli (Join-Path $TargetDir "cli") /E /XD .git /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+}
+$bakSiteNotes = Join-Path $bak "agent-context\site"
+if (Test-Path -LiteralPath $bakSiteNotes) {
+  New-Item -ItemType Directory -Path (Join-Path $TargetDir "agent-context\site") -Force | Out-Null
+  robocopy $bakSiteNotes (Join-Path $TargetDir "agent-context\site") /E /XD .git /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
+}
+$bakDocker = Join-Path $bak "docker"
+if (Test-Path -LiteralPath $bakDocker) {
+  Get-ChildItem -LiteralPath $bakDocker -Recurse -File -Force | ForEach-Object {
+    $name = $_.Name
+    if ($name -eq "README.md" -or $name -eq ".gitkeep" -or $name.EndsWith(".example")) { return }
+    $rel = $_.FullName.Substring($bakDocker.Length).TrimStart('\', '/')
+    $target = Join-Path (Join-Path $TargetDir "docker") $rel
+    $dir = Split-Path -Parent $target
+    if (-not (Test-Path -LiteralPath $dir)) {
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    Copy-Item -LiteralPath $_.FullName -Destination $target -Force
+  }
+}
+
 Remove-Item $bak -Recurse -Force -ErrorAction SilentlyContinue
 
 # --- commit / push ---
@@ -656,13 +718,14 @@ if ($Start) {
       "-f", "upstream/docker-compose.backend.yml",
       "-f", ("upstream/{0}" -f $portsFile),
       "-f", "docker-compose.config.yml",
+      "-f", "docker-compose.custom.yml",
       "-f", "docker-compose.apps.yml"
     )
     $code = Invoke-DockerCommand ($backendComposeArgs + @("pull"))
     if ($code -ne 0) { throw "docker compose pull failed" }
     $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d"))
     if ($code -ne 0) { throw "docker compose up failed" }
-    $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force", "--stop", "pkm-data-permissions"))
+    $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force", "--stop", "pkm-data-permissions", "site-cli-volumes-permissions"))
     $frontendComposeArgs = @(
       "compose", "--project-directory", ".",
       "-f", "upstream/docker-compose.frontend.yml",
@@ -687,5 +750,5 @@ Write-Host "Done. Flat install converted in place:"
 Write-Host ("  {0}" -f $TargetDir)
 Write-Host "  upstream/  = product submodule (git pull inside to update)"
 Write-Host "  data/      = your volumes"
-Write-Host ("  Backend   : docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/{0} -f docker-compose.config.yml -f docker-compose.apps.yml up -d" -f $portsFile)
+Write-Host ("  Backend   : docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/{0} -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml up -d" -f $portsFile)
 Write-Host ("  Frontend  : docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/{0} up -d" -f $frontendPortsFile)

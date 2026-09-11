@@ -9,7 +9,7 @@ set -euo pipefail
 NOTIFY_WEBHOOK_URL="${HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL:-}"
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTIFICATION_LOG="${HOMELAB_PULL_LOG:-$SCRIPT_ROOT/logs/pull-data-git.log}"
-BACKUP_PATHS=(data docker-compose.apps.yml README.md overrides)
+BACKUP_PATHS=(data docker-compose.custom.yml docker-compose.apps.yml README.md overrides)
 SQLITE_MERGE_HELPER="$SCRIPT_ROOT/Merge-SqliteGitConflict.py"
 PKM_DUP_HELPER="$SCRIPT_ROOT/Normalize-PkmDuplicatePaths.py"
 EXCLUDE_PATHSPEC=':(exclude)data/pkm/scripts/**/.uploads/**'

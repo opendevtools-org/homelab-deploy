@@ -20,7 +20,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$backupPaths = @("data", "docker-compose.apps.yml", "README.md", "overrides")
+$backupPaths = @("data", "docker-compose.custom.yml", "docker-compose.apps.yml", "README.md", "overrides")
 $excludePathspec = ":(exclude)data/pkm/scripts/**/.uploads/**"
 $sqliteMergeHelper = Join-Path $PSScriptRoot "Merge-SqliteGitConflict.py"
 $pkmDupHelper = Join-Path $PSScriptRoot "Normalize-PkmDuplicatePaths.py"

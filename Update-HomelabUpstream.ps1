@@ -10,7 +10,10 @@
     Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*,
     Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
     docker-compose.config.yml, docker-compose.https.yml, Caddyfile,
-    and the layered gitignore files.
+    the layered gitignore files, scriptkit/, agent-context/ (not site/),
+    and docker/*.example. Does not overwrite docker-compose.custom.yml,
+    docker-compose.apps.yml,
+    docker/**/Dockerfile, or cli/.
 
 .PARAMETER Ports
   lan | local. Default: lan
@@ -229,6 +232,12 @@ if ($refreshed.Count -gt 0) {
   Write-Host ("Refreshed site-root {0}" -f ($refreshed -join ", "))
 }
 
+$refreshHelper = Join-Path $upstream "Refresh-SiteProductTrees.ps1"
+if (Test-Path -LiteralPath $refreshHelper) {
+  & $refreshHelper -Upstream $upstream -SiteRoot $siteRoot
+  Write-Host "Refreshed scriptkit, agent-context, docker examples."
+}
+
 Set-Location $siteRoot
 
 function Get-DotEnvValue {
@@ -264,14 +273,14 @@ if ($Commit) {
       Invoke-Git add $name | Out-Null
     }
   }
-  foreach ($name in @(".gitignore", ".gitignore.custom", ".gitignore.upstream")) {
+  foreach ($name in @(".gitignore", ".gitignore.custom", ".gitignore.upstream", "scriptkit", "agent-context", "docker", "docker-compose.custom.example.yml", "docker-compose.apps.example.yml")) {
     if (Test-Path (Join-Path $siteRoot $name)) {
       Invoke-Git add $name | Out-Null
     }
   }
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  $statusArgs = @("status", "--porcelain", "--", "upstream", ".gitignore", ".gitignore.custom", ".gitignore.upstream") + $launcherNames
+  $statusArgs = @("status", "--porcelain", "--", "upstream", ".gitignore", ".gitignore.custom", ".gitignore.upstream", "scriptkit", "agent-context", "docker", "docker-compose.custom.example.yml", "docker-compose.apps.example.yml") + $launcherNames
   $porcelain = & git @statusArgs 2>&1
   $ErrorActionPreference = $prev
   if ($porcelain) {
@@ -321,13 +330,14 @@ if ($Start) {
       "-f", "upstream/docker-compose.backend.yml",
       "-f", ("upstream/{0}" -f $portsFile),
       "-f", "docker-compose.config.yml",
+      "-f", "docker-compose.custom.yml",
       "-f", "docker-compose.apps.yml"
     )
     $code = Invoke-DockerCommand ($backendComposeArgs + @("pull"))
     if ($code -ne 0) { throw "docker compose pull failed" }
     $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d"))
     if ($code -ne 0) { throw "docker compose up failed" }
-    $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force", "--stop", "pkm-data-permissions"))
+    $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force", "--stop", "pkm-data-permissions", "site-cli-volumes-permissions"))
     $frontendComposeArgs = @(
       "compose", "--project-directory", ".",
       "-f", "upstream/docker-compose.frontend.yml",

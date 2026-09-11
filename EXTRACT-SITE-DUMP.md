@@ -36,15 +36,19 @@ Port only fixes that **any** site would hit. If the dump hardcodes a name, IP, p
 - Git/OS duplicate wiki paths: `name-1` next to `name` under `data/pkm/docs`. Product helper: `Normalize-PkmDuplicatePaths.py` (strip only a final `-1` segment, not `ubuntu-22`). Wire through `Pull-DataGit.sh` and `Pull-DataGit.ps1`. Snapshot/restore `pages.position` on canonical keys. Copy the helper in `New-HomelabSite` and `Update-HomelabUpstream` launcher lists.
 - Git as root then PKM as `PUID`/`PGID`: `PermissionError` on `data/pkm/bookmarks`. After Backup/Pull on Linux, `mkdir -p bookmarks` and `chown -R` when running as root. First-start also in `docker-compose.config.yml`.
 - HTTPS LAN + clipboard: Caddy overlay, `PUBLIC_PKM_URL` https, optional `PUBLIC_PKM_URL_HTTP` for Hub catalog when the browser is still on HTTP. Implement in Hub Platform + compose env, **not** by bind-mounting entire Platform Python files.
-- Nginx `X-Forwarded-Proto` / CRLF on `15-apply-code-overrides.sh`: fix Hub/PKM **images** (Dockerfile `sed` of `\r`, `.gitattributes` LF). Do not keep a site `Dockerfile` `FROM …:latest` + `sed` as the product solution.
+- Nginx `X-Forwarded-Proto` / CRLF on `15-apply-code-overrides.sh`: fix Hub/PKM **images** (Dockerfile `tr -d '\015'`, `.gitattributes` LF). Do not keep a site compose/entrypoint workaround that deletes the script, and do not keep a site `Dockerfile` `FROM …:latest` + `sed` as the product solution.
 - Nginx `sub_filter` on minified JS: do **not** ship as default `overrides/*/default.conf`. Fix the frontend source or leave as a documented optional override.
+- Extra packages in a site `Dockerfile` `FROM` the published image: product ships `docker/<service>/Dockerfile.example` + `docker-compose.custom.example.yml`. Refresh examples on update; never overwrite a real `Dockerfile` or `docker-compose.custom.yml`. Named-volume chown stays in `docker-compose.config.yml`. Extra apps stay in `docker-compose.apps.yml`.
+- PKM script launchers (stdin JSON, `--input-json`, temp file, exit forwarding): product library `scriptkit/odt_scripts`. Site CLIs stay in `cli/`. Agent notes: `agent-context/` product + `agent-context/site/` instance.
+- Stale Hub catalog URL after changing `PUBLIC_PKM_URL`: Platform `seed_builtins()` already writes `plugins.public_url` from env. Recreate `hub-platform`. Do not add a `docker exec` SQL patch to Update-HomelabUpstream.
+- PKM “run script” leaves previous stdout on screen: clear result in the PKM frontend at the start of run. Do not inject JS via nginx `sub_filter`.
 
 ## Implementation rules
 
 - Prefer Hub/PKM source or a small helper script over copying a whole service file from the dump.
 - Keep bash and PowerShell behavior aligned when you touch a pair (`.sh` / `.ps1`).
 - Document the generic behavior in `README.md` (English). No customer hostnames, no `/opt/…` paths.
-- Do not empty `docker-compose.apps.yml` with site bind-mounts of `config.py`/`main.py`.
+- Do not empty `docker-compose.custom.yml` or `docker-compose.apps.yml` with site bind-mounts of `config.py`/`main.py`.
 - After code changes, say whether GHCR republish is required (image vs compose/script only).
 - Do not commit or push unless the operator asks. If they ask to publish the compose package, sync this folder to `opendevtools-org/homelab-deploy` with org identity and a leak scan (`rg` for personal/customer strings).
 

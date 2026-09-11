@@ -1,0 +1,11 @@
+# Extra app / Market plugin overlay examples.
+# Copy snippets into docker-compose.apps.yml (site-owned, never overwritten).
+#
+# Hub/PKM custom image and cli mounts belong in docker-compose.custom.yml,
+# not here. See docker-compose.custom.example.yml.
+#
+# include:
+#   - path: plugins/vibravid/docker-compose.backend.yml
+#     project_directory: .
+
+services: {}

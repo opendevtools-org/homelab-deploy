@@ -30,7 +30,14 @@ def canonical_segment(part: str) -> str:
 
 def canonical_path(path: str) -> str:
     parts = [p for p in path.replace("\\", "/").split("/") if p]
-    return "/".join(canonical_segment(p) for p in parts)
+    normalized = []
+    for index, part in enumerate(parts):
+        if index == len(parts) - 1 and "." in part and not part.startswith("."):
+            stem, suffix = part.rsplit(".", 1)
+            normalized.append(f"{canonical_segment(stem)}.{suffix}")
+        else:
+            normalized.append(canonical_segment(part))
+    return "/".join(normalized)
 
 
 def snapshot_positions(db_path: Path, output_path: Path) -> int:
@@ -57,15 +64,32 @@ def restore_positions(db_path: Path, snapshot_path: Path) -> int:
     updated = 0
     try:
         with conn:
-            for (path,) in conn.execute("SELECT path FROM pages").fetchall():
+            columns = {row[1] for row in conn.execute("PRAGMA table_info(pages)")}
+            if "parent_id" in columns:
+                rows = conn.execute("SELECT path, parent_id FROM pages").fetchall()
+            else:
+                rows = [(path, None) for (path,) in conn.execute("SELECT path FROM pages").fetchall()]
+            matched = []
+            for path, parent_id in rows:
                 position = positions.get(canonical_path(path))
-                if position is None:
-                    continue
-                conn.execute(
-                    "UPDATE pages SET position=? WHERE path=?",
-                    (position, path),
-                )
-                updated += 1
+                if position is not None:
+                    matched.append((parent_id, path, position))
+
+            by_parent = {}
+            for parent_id, path, position in matched:
+                by_parent.setdefault(parent_id, []).append((path, position))
+            for siblings in by_parent.values():
+                siblings.sort(key=lambda item: (item[1], item[0]))
+                previous_position = None
+                for _index, (path, position) in enumerate(siblings):
+                    if previous_position is not None and position <= previous_position:
+                        position = previous_position + 1
+                    conn.execute(
+                        "UPDATE pages SET position=? WHERE path=?",
+                        (position, path),
+                    )
+                    previous_position = position
+                    updated += 1
     finally:
         conn.close()
     return updated

@@ -1,0 +1,7 @@
+# Site Hub/PKM image overlay. Empty by default.
+# Always included with the backend compose (see README).
+# Site-owned: Update-HomelabUpstream does not overwrite this file.
+# Copy snippets from docker-compose.custom.example.yml (build, cli/scriptkit mounts).
+# One-shot chown of named volumes lives in docker-compose.config.yml, not here.
+
+services: {}

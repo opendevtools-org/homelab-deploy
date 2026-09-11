@@ -59,7 +59,10 @@ git reset --hard origin/main
 REV="$(git rev-parse --short HEAD)"
 echo "Upstream  : $REV"
 
-# Refresh site-root launchers from product package
+# Refresh site-root launchers from product package.
+# Also refreshes scriptkit/, agent-context/ (not site/), docker/*.example.
+# Never overwrites docker-compose.custom.yml, docker-compose.apps.yml,
+# docker/**/Dockerfile, or cli/.
 LAUNCHERS=(
   Update-HomelabUpstream.sh
   Update-HomelabUpstream.ps1
@@ -138,6 +141,12 @@ if [[ -f "$UPSTREAM_GITIGNORE" ]]; then
   } >"$SITE_GITIGNORE"
 fi
 
+if [[ -f "$UPSTREAM/Refresh-SiteProductTrees.sh" ]]; then
+  chmod +x "$UPSTREAM/Refresh-SiteProductTrees.sh" 2>/dev/null || true
+  /bin/bash "$UPSTREAM/Refresh-SiteProductTrees.sh" "$UPSTREAM" "$SITE_ROOT"
+  echo "Refreshed scriptkit, agent-context, docker examples."
+fi
+
 cd "$SITE_ROOT"
 
 env_val() {
@@ -162,7 +171,8 @@ if [[ "$COMMIT" -eq 1 ]]; then
     [[ -f "$s" ]] && git add "$s" || true
   done
   git add .gitignore .gitignore.custom .gitignore.upstream 2>/dev/null || true
-  if [[ -n "$(git status --porcelain -- upstream .gitignore .gitignore.custom .gitignore.upstream "${LAUNCHERS[@]}" 2>/dev/null || true)" ]]; then
+  git add scriptkit agent-context docker docker-compose.custom.example.yml docker-compose.apps.example.yml 2>/dev/null || true
+  if [[ -n "$(git status --porcelain -- upstream .gitignore .gitignore.custom .gitignore.upstream scriptkit agent-context docker docker-compose.custom.example.yml docker-compose.apps.example.yml "${LAUNCHERS[@]}" 2>/dev/null || true)" ]]; then
     git commit -m "Bump homelab-deploy upstream (${REV})."
     echo "Committed submodule pointer."
   else
@@ -192,18 +202,21 @@ if [[ "$START" -eq 1 ]]; then
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
+    -f docker-compose.custom.yml \
     -f docker-compose.apps.yml pull
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
+    -f docker-compose.custom.yml \
     -f docker-compose.apps.yml up -d
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
+    -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
-    rm --force --stop pkm-data-permissions >/dev/null 2>&1 || true
+    rm --force --stop pkm-data-permissions site-cli-volumes-permissions >/dev/null 2>&1 || true
   if https_overlay_enabled; then
     echo "LAN HTTPS overlay (Caddy) enabled."
     docker compose --project-directory . \

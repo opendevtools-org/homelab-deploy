@@ -2,7 +2,8 @@
 # Do not combine this file with docker-compose.frontend.yml in one `up`.
 #
 #   docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml \
-#     -f docker-compose.config.yml -f docker-compose.apps.yml up -d
+#     -f docker-compose.config.yml -f docker-compose.custom.yml \
+#     -f docker-compose.apps.yml up -d
 
 name: homelab-backend
 

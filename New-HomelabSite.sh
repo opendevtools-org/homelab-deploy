@@ -154,9 +154,19 @@ if [[ -d "$TARGET_DIR/data" ]]; then
   mkdir -p "$BAK/data"
   cp -a "$TARGET_DIR/data/." "$BAK/data/"
 fi
-for name in .env docker-compose.apps.yml .env.example .gitignore .gitignore.custom; do
+for name in .env docker-compose.custom.yml docker-compose.apps.yml .env.example .gitignore .gitignore.custom; do
   [[ -f "$TARGET_DIR/$name" ]] && cp -a "$TARGET_DIR/$name" "$BAK/$name"
 done
+for dir in docker cli; do
+  if [[ -d "$TARGET_DIR/$dir" ]]; then
+    mkdir -p "$BAK/$dir"
+    cp -a "$TARGET_DIR/$dir/." "$BAK/$dir/"
+  fi
+done
+if [[ -d "$TARGET_DIR/agent-context/site" ]]; then
+  mkdir -p "$BAK/agent-context/site"
+  cp -a "$TARGET_DIR/agent-context/site/." "$BAK/agent-context/site/"
+fi
 
 cd "$TARGET_DIR"
 
@@ -180,6 +190,7 @@ if [[ "$already_site" -eq 0 ]]; then
     docker-compose.https.yml \
     Caddyfile \
     docker-compose.apps.yml docker-compose.apps.example.yml \
+    docker-compose.custom.yml docker-compose.custom.example.yml \
     LICENSE README.md \
     New-HomelabSite.ps1 New-HomelabSite.sh \
     Update-HomelabUpstream.ps1 Update-HomelabUpstream.sh \
@@ -188,14 +199,15 @@ if [[ "$already_site" -eq 0 ]]; then
     Pull-DataGit.ps1 Pull-DataGit.sh \
     Register-DataGitPullTask.ps1 Register-DataGitPull.sh \
     Reindex-PkmFromDisk.ps1 Reindex-PkmFromDisk.sh \
-    docker-compose.config.yml
+    docker-compose.config.yml \
+    Refresh-SiteProductTrees.sh Refresh-SiteProductTrees.ps1
   do
     # keep apps.yml content via backup; remove product copy from root
-    [[ "$f" == "docker-compose.apps.yml" ]] && continue
+    [[ "$f" == "docker-compose.apps.yml" || "$f" == "docker-compose.custom.yml" ]] && continue
     rm -f "$TARGET_DIR/$f"
   done
-  # product apps.yml will be restored from backup or upstream
-  rm -f "$TARGET_DIR/docker-compose.apps.yml"
+  # product overlays will be restored from backup or upstream
+  rm -f "$TARGET_DIR/docker-compose.apps.yml" "$TARGET_DIR/docker-compose.custom.yml"
 fi
 
 if [[ "$SKIP_GIT" -eq 0 ]]; then
@@ -274,7 +286,14 @@ if [[ -f "$BAK/docker-compose.apps.yml" ]]; then
 elif [[ -f "$TARGET_DIR/upstream/docker-compose.apps.yml" ]]; then
   cp -a "$TARGET_DIR/upstream/docker-compose.apps.yml" "$TARGET_DIR/docker-compose.apps.yml"
 else
-  printf '%s\n' '# Optional services for this host.' 'services: {}' >"$TARGET_DIR/docker-compose.apps.yml"
+  printf '%s\n' '# Optional extra backends for this host.' 'services: {}' >"$TARGET_DIR/docker-compose.apps.yml"
+fi
+if [[ -f "$BAK/docker-compose.custom.yml" ]]; then
+  cp -a "$BAK/docker-compose.custom.yml" "$TARGET_DIR/docker-compose.custom.yml"
+elif [[ -f "$TARGET_DIR/upstream/docker-compose.custom.yml" ]]; then
+  cp -a "$TARGET_DIR/upstream/docker-compose.custom.yml" "$TARGET_DIR/docker-compose.custom.yml"
+else
+  printf '%s\n' '# Site Hub/PKM overlay.' 'services: {}' >"$TARGET_DIR/docker-compose.custom.yml"
 fi
 
 mkdir -p \
@@ -298,8 +317,13 @@ cat >"$TARGET_DIR/README.md" <<EOF
 
 - \`upstream/\` — submodule ($UPSTREAM_URL)
 - \`data/\` — volumes
-- \`docker-compose.config.yml\` — one-time PKM data ownership
-- \`docker-compose.apps.yml\` — extra services
+- \`docker-compose.config.yml\` — one-shot ownership (\`data/pkm\` + CLI volumes)
+- \`docker-compose.custom.yml\` — Hub/PKM image + cli mounts (site-owned)
+- \`docker-compose.apps.yml\` — extra apps / Market plugins (site-owned)
+- \`docker/\` — optional site Dockerfile (\`FROM\` published images)
+- \`cli/\` — site CLIs (not overwritten on product update)
+- \`scriptkit/\` — Python library for PKM launchers (refreshed from upstream)
+- \`agent-context/\` — Hub/PKM notes for agents; extras in \`agent-context/site/\`
 - \`overrides/\` — optional code patches (see \`overrides/README.md\`)
 - \`.env\` — secrets (not committed)
 - \`.gitignore\` — generated; edit \`.gitignore.custom\` for site extras
@@ -316,6 +340,7 @@ docker compose --project-directory . \\
   -f upstream/docker-compose.backend.yml \\
   -f upstream/$PORTS_FILE \\
   -f docker-compose.config.yml \\
+  -f docker-compose.custom.yml \\
   -f docker-compose.apps.yml up -d
 docker compose --project-directory . \\
   -f upstream/docker-compose.frontend.yml \\
@@ -375,6 +400,29 @@ done
 [[ -f "$TARGET_DIR/upstream/Pull-DataGit.sh" ]] && chmod +x "$TARGET_DIR/upstream/Pull-DataGit.sh" || true
 [[ -f "$TARGET_DIR/upstream/Register-DataGitPull.sh" ]] && chmod +x "$TARGET_DIR/upstream/Register-DataGitPull.sh" || true
 [[ -f "$TARGET_DIR/upstream/Reindex-PkmFromDisk.sh" ]] && chmod +x "$TARGET_DIR/upstream/Reindex-PkmFromDisk.sh" || true
+[[ -f "$TARGET_DIR/upstream/Refresh-SiteProductTrees.sh" ]] && chmod +x "$TARGET_DIR/upstream/Refresh-SiteProductTrees.sh" || true
+if [[ -f "$TARGET_DIR/upstream/Refresh-SiteProductTrees.sh" ]]; then
+  /bin/bash "$TARGET_DIR/upstream/Refresh-SiteProductTrees.sh" "$TARGET_DIR/upstream" "$TARGET_DIR"
+fi
+if [[ -d "$BAK/cli" ]]; then
+  mkdir -p "$TARGET_DIR/cli"
+  cp -a "$BAK/cli/." "$TARGET_DIR/cli/"
+fi
+if [[ -d "$BAK/agent-context/site" ]]; then
+  mkdir -p "$TARGET_DIR/agent-context/site"
+  cp -a "$BAK/agent-context/site/." "$TARGET_DIR/agent-context/site/"
+fi
+if [[ -d "$BAK/docker" ]]; then
+  while IFS= read -r file; do
+    rel="${file#"$BAK/docker"/}"
+    name="$(basename "$file")"
+    case "$name" in
+      README.md|.gitkeep|*.example) continue ;;
+    esac
+    mkdir -p "$TARGET_DIR/docker/$(dirname "$rel")"
+    cp -a "$file" "$TARGET_DIR/docker/$rel"
+  done < <(find "$BAK/docker" -type f)
+fi
 
 if [[ "$SKIP_GIT" -eq 0 && "$SKIP_COMMIT" -eq 0 && -d "$TARGET_DIR/.git" ]]; then
   cd "$TARGET_DIR"
@@ -413,18 +461,21 @@ if [[ "$START" -eq 1 ]]; then
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
+    -f docker-compose.custom.yml \
     -f docker-compose.apps.yml pull
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
+    -f docker-compose.custom.yml \
     -f docker-compose.apps.yml up -d
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
+    -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
-    rm --force --stop pkm-data-permissions >/dev/null 2>&1 || true
+    rm --force --stop pkm-data-permissions site-cli-volumes-permissions >/dev/null 2>&1 || true
   if https_overlay_enabled "$TARGET_DIR"; then
     echo "LAN HTTPS overlay (Caddy) enabled."
     docker compose --project-directory . \
@@ -448,5 +499,5 @@ fi
 echo
 echo "Done. Flat install converted in place:"
 echo "  $TARGET_DIR"
-echo "  Backend:  docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/$PORTS_FILE -f docker-compose.config.yml -f docker-compose.apps.yml up -d"
+echo "  Backend:  docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/$PORTS_FILE -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml up -d"
 echo "  Frontend: docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/$FRONTEND_PORTS_FILE up -d"

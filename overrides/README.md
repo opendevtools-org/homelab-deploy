@@ -9,7 +9,7 @@ Drop a file here and recreate the container. No image rebuild.
 | `hub-frontend/` | `/overrides` | `default.conf` (replaces the nginx template if present) |
 | `pkm-frontend/` | `/overrides` | `default.conf` (same) |
 
-Python: `sitecustomize.py` is loaded from `/overrides` regardless of the image’s Python minor version. Patch functions; do not copy whole `main.py` / `config.py` unless you also bind-mount them in `docker-compose.apps.yml`.
+Python: `sitecustomize.py` is loaded from `/overrides` regardless of the image’s Python minor version. Patch functions; do not copy whole `main.py` / `config.py` unless you also bind-mount them in `docker-compose.custom.yml`.
 
 Nginx: if `default.conf` exists, the container copies it onto the stock template at start.
 
@@ -17,6 +17,7 @@ Empty folders are required so Compose bind-mounts succeed. Recreate after adding
 
 ```bash
 docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml \
-  -f docker-compose.config.yml -f docker-compose.apps.yml up -d
+  -f docker-compose.config.yml -f docker-compose.custom.yml \
+  -f docker-compose.apps.yml up -d
 docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
 ```

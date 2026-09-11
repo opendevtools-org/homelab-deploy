@@ -4,7 +4,7 @@
 
 .DESCRIPTION
   For site instances (data/ is versioned). Stages data/, README.md, and
-  docker-compose.apps.yml, creates a timestamped commit if needed, syncs
+  docker-compose.custom.yml, docker-compose.apps.yml, creates a timestamped commit if needed, syncs
   with origin (rebase then merge fallback), then pushes the current branch.
   After a successful sync, restarts PKM and imports pages/files/PDFs/bookmarks
   from disk (same as Import from disk in the UI).
@@ -20,7 +20,7 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$backupPaths = @("data", "docker-compose.apps.yml", "README.md", "overrides")
+$backupPaths = @("data", "docker-compose.custom.yml", "docker-compose.apps.yml", "README.md", "overrides")
 $excludePathspec = ":(exclude)data/pkm/scripts/generateReadme/.uploads/**"
 $sqliteMergeHelper = Join-Path $PSScriptRoot "Merge-SqliteGitConflict.py"
 $script:gitExtraArgs = @()
@@ -382,7 +382,7 @@ try {
     $message = "backup(site): $timestamp"
     Invoke-Git commit -m $message | Out-Null
   } else {
-    $msg = "No changes in backup paths (data/, docker-compose.apps.yml, README.md). Continuing with remote sync."
+    $msg = "No changes in backup paths (data/, docker-compose.custom.yml, docker-compose.apps.yml, README.md). Continuing with remote sync."
     Write-Host $msg
     Send-Notification -Level "INFO" -Message $msg
   }
@@ -406,7 +406,7 @@ try {
 
   Invoke-Git push origin $branch | Out-Null
 
-  $ok = "Backup/sync of data/, docker-compose.apps.yml, and README.md completed on branch '{0}'." -f $branch
+  $ok = "Backup/sync of data/, docker-compose.custom.yml, docker-compose.apps.yml, and README.md completed on branch '{0}'." -f $branch
   Write-Host $ok
   Send-Notification -Level "INFO" -Message $ok
   Invoke-PkmDiskReindex

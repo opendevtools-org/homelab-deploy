@@ -27,6 +27,7 @@ norm = load_helper()
 class CanonicalTests(unittest.TestCase):
     def test_strips_duplicate_dash_one_only(self) -> None:
         self.assertEqual(norm.canonical_path("notes/install-1/page.md"), "notes/install/page.md")
+        self.assertEqual(norm.canonical_path("notes/install-1.md"), "notes/install.md")
         self.assertEqual(norm.canonical_path("notes/ubuntu-22/page"), "notes/ubuntu-22/page")
         self.assertEqual(norm.canonical_path("notes/item-11"), "notes/item-11")
 
@@ -85,6 +86,27 @@ class FsAndPositionTests(unittest.TestCase):
             pos = conn.execute("SELECT position FROM pages WHERE path='guide/intro'").fetchone()[0]
             conn.close()
             self.assertEqual(pos, 3)
+
+    def test_restore_positions_breaks_sibling_ties(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            root = Path(tmp)
+            db = root / "pkm.db"
+            snap = root / "pos.json"
+            conn = sqlite3.connect(db)
+            conn.execute("CREATE TABLE pages (path TEXT, parent_id TEXT, position REAL)")
+            conn.executemany(
+                "INSERT INTO pages VALUES (?, ?, ?)",
+                [("z.md", "root", 29), ("a.md", "root", 29)],
+            )
+            conn.commit()
+            conn.close()
+            snap.write_text(json.dumps({"z.md": 4, "a.md": 4}), encoding="utf-8")
+
+            self.assertEqual(norm.restore_positions(db, snap), 2)
+            conn = sqlite3.connect(db)
+            rows = conn.execute("SELECT path, position FROM pages ORDER BY position").fetchall()
+            conn.close()
+            self.assertEqual(rows, [("a.md", 4), ("z.md", 5)])
 
 
 if __name__ == "__main__":

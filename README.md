@@ -11,7 +11,8 @@ Needs Docker Compose v2 and access to `ghcr.io`.
 | `homelab-backend` | `docker-compose.backend.yml` | server | Hub Platform API + PKM API |
 | | `docker-compose.yml` | server | alias of `docker-compose.backend.yml` |
 | | `docker-compose.lan.yml` or `.local.yml` | server | API host ports (pick one) |
-| | `docker-compose.config.yml` | server | one-time PKM data ownership |
+| | `docker-compose.config.yml` | server | one-shot ownership (`data/pkm` + CLI named volumes) |
+| | `docker-compose.custom.yml` | server | optional Hub/PKM image + `cli/` mounts |
 | | `docker-compose.apps.yml` | server | extra **backends** (Market plugins) |
 | `homelab-frontend` | `docker-compose.frontend.yml` | same host as APIs | Hub UI + PKM UI (joins `homelab_default`) |
 | | `docker-compose.frontend.lan.yml` or `.frontend.local.yml` | same host or device | UI host ports |
@@ -29,8 +30,8 @@ cd homelab-deploy
 cp .env.example .env   # Windows: copy .env.example .env
 # fill secrets in .env
 
-docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.apps.yml pull
-docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.apps.yml up -d
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml pull
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml up -d
 ```
 
 Localhost: swap `lan` for `local`. Do not combine both. `docker-compose.yml` is an alias of `docker-compose.backend.yml`.
@@ -111,6 +112,21 @@ Put patches in `overrides/<service>/` and recreate the container. No image rebui
 
 Site instance: the same folders live at the site root (`./overrides`), not inside `upstream/`. Compose uses `--project-directory .` so the mounts hit the site copies.
 
+## Extra packages and site CLIs
+
+`docker-compose.custom.yml`, `docker-compose.apps.yml`, `docker/**/Dockerfile`, and `cli/` are **site-owned**. `Update-HomelabUpstream` refreshes `scriptkit/`, `agent-context/` (except `site/`), `docker/*.example`, and the `*.example.yml` overlays only.
+
+| Need | Where |
+|------|--------|
+| Extra OS packages (Java, Maven, …) | Copy `docker/pkm-backend/Dockerfile.example` → `Dockerfile`, then the `build:` snippet from `docker-compose.custom.example.yml` |
+| Heavy CLI cache (git, Maven) | Named volumes `site-cli-cache` / `site-cli-home` + one-shot chown in `docker-compose.config.yml` |
+| Shared Python helpers | `scriptkit/odt_scripts` (`PYTHONPATH=/app/scriptkit:/overrides`) |
+| Your commands | `cli/<name>/src/` + a PKM launcher under `data/pkm/scripts/<name>/` |
+| Extra apps / Market plugins | `docker-compose.apps.yml` |
+| Agent notes | `agent-context/` (product) and `agent-context/site/` (instance) |
+
+Do not bind-mount whole Platform `main.py` / `config.py`. Recreate with `--build` after Dockerfile edits.
+
 ## Community plugins (Hub Market)
 
 Public plugins live in [`opendevtools-org/hub-community-plugins`](https://github.com/opendevtools-org/hub-community-plugins).
@@ -132,8 +148,8 @@ Upgrade (flat, server):
 
 ```bash
 git pull
-docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.apps.yml pull
-docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.apps.yml up -d
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml pull
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml up -d
 docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml pull
 docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
 # If HUB_HOSTNAME and PKM_HOSTNAME are set, also add -f docker-compose.https.yml
@@ -173,7 +189,10 @@ Layout after convert:
 ./data/
 ./.env
 ./docker-compose.config.yml
+./docker-compose.custom.yml
 ./docker-compose.apps.yml
+./docker-compose.custom.example.yml
+./docker-compose.apps.example.yml
 ./Update-HomelabUpstream.sh
 ./Update-HomelabUpstream.ps1
 ./Backup-DataGit.sh
@@ -188,6 +207,10 @@ Layout after convert:
 ./Reindex-PkmFromDisk.ps1
 ./Caddyfile
 ./docker-compose.https.yml
+./docker/
+./cli/
+./scriptkit/
+./agent-context/
 ./overrides/
 ./.gitignore.upstream
 ./.gitignore.custom
@@ -201,6 +224,7 @@ docker compose --project-directory . \
   -f upstream/docker-compose.backend.yml \
   -f upstream/docker-compose.lan.yml \
   -f docker-compose.config.yml \
+  -f docker-compose.custom.yml \
   -f docker-compose.apps.yml up -d
 docker compose --project-directory . \
   -f upstream/docker-compose.frontend.yml \
@@ -218,7 +242,7 @@ First start on a new host:
 4. If `pkm-backend` restarts with a permission error on `/app/data/bookmarks`, the data dir is not owned by `PUID`/`PGID`. Recreate with `docker-compose.config.yml` included, or `chown -R 1000:1000 data/pkm` on a Linux host (use the same ids as `.env`).
 5. From other machines, set `PUBLIC_PKM_URL` to the server IP or hostname, not `127.0.0.1`. For clipboard paste of images, use the LAN HTTPS overlay below.
 
-Do not bind-mount whole Platform `main.py` / `config.py` into `docker-compose.apps.yml`. Prefer a new image (`HOMELAB_VERSION` / `PKM_VERSION`) or a small `overrides/*/sitecustomize.py` / `default.conf`.
+Do not bind-mount whole Platform `main.py` / `config.py` into `docker-compose.custom.yml` or `docker-compose.apps.yml`. Prefer a new image (`HOMELAB_VERSION` / `PKM_VERSION`), a site `docker/<service>/Dockerfile` that `FROM`s the published image, or a small `overrides/*/sitecustomize.py` / `default.conf`.
 
 ### Update product — `Update-HomelabUpstream`
 
@@ -244,7 +268,7 @@ No flags: only `git pull` in `upstream/`.
 
 ### Daily data backup — `Backup-DataGit`
 
-Site instances only (`data/` is versioned). `New-HomelabSite` initializes a layered gitignore: `.gitignore.upstream` tracks this package, `.gitignore.custom` holds **only** site extras, and `.gitignore` is generated from both (do not edit it). `Update-HomelabUpstream` refreshes the upstream layer, so custom rules survive product updates. Commits and pushes `data/`, `docker-compose.apps.yml`, `overrides/`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge.
+Site instances only (`data/` is versioned). `New-HomelabSite` initializes a layered gitignore: `.gitignore.upstream` tracks this package, `.gitignore.custom` holds **only** site extras, and `.gitignore` is generated from both (do not edit it). `Update-HomelabUpstream` refreshes the upstream layer, so custom rules survive product updates. Commits and pushes `data/`, `docker-compose.custom.yml`, `docker-compose.apps.yml`, `overrides/`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge.
 
 For `data/hub/platform.db` and `data/pkm/pkm.db`, Backup/Pull run a three-way SQLite row merge (`Merge-SqliteGitConflict.py`): rows present on only one side are kept; when the same row changed on both sides, the later `updated_at` (or equivalent timestamp) wins. FTS, locks, and runtime state are not merged; PKM rebuilds them on reindex. The merged file replaces the canonical db only after integrity and foreign-key checks. If Python or the helper is missing, or schemas differ, the conservative fallback applies: remote stays canonical and the local copy is saved next to it:
 
@@ -280,7 +304,7 @@ If both machines can receive edits, schedule Git on both:
 - primary: `Backup-DataGit.sh` or `Backup-DataGit.ps1`
 - standby: `Pull-DataGit.sh` or `Pull-DataGit.ps1`
 
-The standby pull first commits local changes in `data/`, `docker-compose.apps.yml`, and `README.md`, then syncs with `origin` and pushes. Edits made on either server reach the other on the next run.
+The standby pull first commits local changes in `data/`, `docker-compose.custom.yml`, `docker-compose.apps.yml`, and `README.md`, then syncs with `origin` and pushes. Edits made on either server reach the other on the next run.
 
 After the Git sync, `Pull-DataGit` also collapses generic PKM duplicates created when two trees meet: a folder or page named `name-1` next to `name` (Finder/Explorer/Git copy suffix). The canonical name is kept; differing files are archived as `*.local-conflict.*`. Page order (`pages.position`) is snapshotted before the pull and reapplied to the canonical paths after reindex. Names like `ubuntu-22` are left alone (`-1` only).
 
