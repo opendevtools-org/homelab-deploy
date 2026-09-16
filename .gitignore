@@ -1,6 +1,5 @@
 .env
 .env.zip
-sugestions/
 *.tar
 *.log
 *.permissions-owner
