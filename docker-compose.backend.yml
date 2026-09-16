@@ -39,6 +39,7 @@ services:
       HUB_MARKET_CATALOG_TTL_SEC: ${HUB_MARKET_CATALOG_TTL_SEC:-600}
       HUB_MARKET_PRIVATE_PATH: ${HUB_MARKET_PRIVATE_PATH:-}
       HUB_MARKET_PLUGINS_DIR: /market-plugins
+      HUB_DEFAULT_MARKET_PLUGINS: ${HUB_DEFAULT_MARKET_PLUGINS:-guacamole}
       # Drop sitecustomize.py in ./overrides/hub-platform to patch Platform without rebuilding.
       PYTHONPATH: /overrides
     volumes:

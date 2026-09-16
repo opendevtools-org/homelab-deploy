@@ -7,7 +7,7 @@ the submodule. Site extras:
 |------|------|-------------------|
 | `docker-compose.config.yml` | one-shot chown (`data/pkm` + CLI volumes) | refreshed |
 | `docker-compose.custom.yml` | Hub/PKM image + `cli/` / `scriptkit/` mounts | kept |
-| `docker-compose.apps.yml` | extra apps / Market plugins | kept |
+| `docker-compose.apps.yml` | extra apps / Market plugins (Guacamole lands here on first start) | kept |
 
 If `upstream/` compose files are missing:
 
@@ -42,6 +42,9 @@ Before `up`, `.env` must set `PLATFORM_SERVICE_TOKEN`, `HUB_JWT_SECRET`, and
 After changing `PUBLIC_PKM_URL`, recreate **hub-platform**. Platform seeds
 `plugins.public_url` from that env on startup. Do not patch `platform.db` by
 hand and do not bind-mount Platform Python files.
+
+First start also installs Guacamole from the community catalog unless
+`HUB_DEFAULT_MARKET_PLUGINS` is `none` or the plugin was uninstalled.
 
 ## Named volumes vs bind mounts
 

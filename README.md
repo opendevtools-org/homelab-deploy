@@ -1,4 +1,4 @@
-# Homelab deploy (Hub + PKM)
+# Homelab deploy (Hub + PKM + Guacamole)
 
 Docker Compose package. Images on `ghcr.io/opendevtools-org`.
 
@@ -13,7 +13,7 @@ Needs Docker Compose v2 and access to `ghcr.io`.
 | | `docker-compose.lan.yml` or `.local.yml` | server | API host ports (pick one) |
 | | `docker-compose.config.yml` | server | one-shot ownership (`data/pkm` + CLI named volumes) |
 | | `docker-compose.custom.yml` | server | optional Hub/PKM image + `cli/` mounts |
-| | `docker-compose.apps.yml` | server | extra **backends** (Market plugins) |
+| | `docker-compose.apps.yml` | server | extra **backends** (Market plugins; Guacamole is installed here on first start) |
 | `homelab-frontend` | `docker-compose.frontend.yml` | same host as APIs | Hub UI + PKM UI (joins `homelab_default`) |
 | | `docker-compose.frontend.lan.yml` or `.frontend.local.yml` | same host or device | UI host ports |
 | | `docker-compose.frontend.remote.yml` | device only | proxy to a remote server |
@@ -66,6 +66,8 @@ docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.remote.
 
 Login: `HUB_ADMIN_*` from `.env`. Create users under Utenti. Data in `./data/hub` and `./data/pkm` (gitignored) on the **server**.
 
+On first Platform start, Hub installs **Guacamole** from the community catalog (`HUB_DEFAULT_MARKET_PLUGINS=guacamole`) unless you already uninstalled it. Open it from the Hub catalog (`/p/guacamole/`). Set `HUB_DEFAULT_MARKET_PLUGINS=none` to skip.
+
 ## LAN HTTPS (clipboard / paste)
 
 Browsers allow clipboard paste of images only in a **secure context**: `localhost` or **HTTPS**. A VPN or LAN URL such as `http://10.0.0.10:3030` is not a secure context, so paste fails even though the rest of the UI works.
@@ -114,7 +116,17 @@ Site instance: the same folders live at the site root (`./overrides`), not insid
 
 ## Extra packages and site CLIs
 
-`docker-compose.custom.yml`, `docker-compose.apps.yml`, `docker/**/Dockerfile`, and `cli/` are **site-owned**. `Update-HomelabUpstream` refreshes `scriptkit/`, `agent-context/` (except `site/`), `docker/*.example`, and the `*.example.yml` overlays only.
+`docker-compose.custom.yml`, `docker-compose.apps.yml`, `docker/**/Dockerfile`, and `cli/` are **site-owned**. `Update-HomelabUpstream` copies `scriptkit/`, `agent-context/` (except `site/`), `docker/*.example`, and the `*.example.yml` overlays onto the **site root** (not only `upstream/`).
+
+If an older site-root updater only refreshed the submodule, run the copy inside `upstream/` once:
+
+```bash
+./upstream/Update-HomelabUpstream.sh
+```
+
+```powershell
+.\upstream\Update-HomelabUpstream.ps1
+```
 
 | Need | Where |
 |------|--------|

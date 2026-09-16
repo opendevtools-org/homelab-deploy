@@ -33,7 +33,8 @@
   .\Update-HomelabUpstream.ps1 -Commit -Push -Start
 
 .EXAMPLE
-  # If site-root copy is stale, run the one inside upstream once:
+  # Same from the submodule (also used as a bootstrap if the site-root
+  # updater is older than the product package):
   .\upstream\Update-HomelabUpstream.ps1 -Commit -Push -Start
 #>
 [CmdletBinding()]
@@ -51,8 +52,15 @@ $ErrorActionPreference = "Stop"
 
 if ($Push) { $Commit = $true }
 
+function Test-HomelabSiteRoot([string]$Dir) {
+  foreach ($name in @("docker-compose.apps.yml", "docker-compose.custom.yml", ".env")) {
+    if (Test-Path -LiteralPath (Join-Path $Dir $name)) { return $true }
+  }
+  return (Test-Path -LiteralPath (Join-Path $Dir "data"))
+}
+
 $here = $PSScriptRoot
-if ((Split-Path -Leaf $here) -eq "upstream" -and (Test-Path (Join-Path (Split-Path -Parent $here) "docker-compose.apps.yml"))) {
+if ((Split-Path -Leaf $here) -eq "upstream" -and (Test-HomelabSiteRoot (Split-Path -Parent $here))) {
   $siteRoot = Split-Path -Parent $here
   $upstream = $here
 } elseif ((Test-Path (Join-Path $here "upstream\docker-compose.yml")) -or
@@ -197,6 +205,35 @@ Invoke-Git reset --hard origin/main | Out-Null
 $rev = (Invoke-Git rev-parse --short HEAD | Select-Object -Last 1).ToString().Trim()
 Write-Host ("Upstream  : {0}" -f $rev)
 
+# Site-root copies can predate new product trees (scriptkit/, agent-context/, …).
+# After pull, re-enter the updater that just landed in upstream/ so those
+# copies always run, even when this process started from an older site-root file.
+if (-not $env:HOMELAB_UPSTREAM_REEXEC) {
+  $canonical = Join-Path $upstream "Update-HomelabUpstream.ps1"
+  if (Test-Path -LiteralPath $canonical) {
+    $running = $PSCommandPath
+    $same = $false
+    try {
+      $same = (
+        (Resolve-Path -LiteralPath $running).Path -eq
+        (Resolve-Path -LiteralPath $canonical).Path
+      )
+    } catch {
+      $same = $false
+    }
+    if (-not $same) {
+      Write-Host "Re-running updater from upstream/ so new product files are copied onto the site root."
+      $env:HOMELAB_UPSTREAM_REEXEC = "1"
+      $reArgs = @{ Ports = $Ports }
+      if ($Commit) { $reArgs["Commit"] = $true }
+      if ($Push) { $reArgs["Push"] = $true }
+      if ($Start) { $reArgs["Start"] = $true }
+      & $canonical @reArgs
+      exit $LASTEXITCODE
+    }
+  }
+}
+
 Sync-GitIgnore
 
 # Keep site-root launchers in sync with product package
@@ -215,6 +252,8 @@ $launcherNames = @(
   "Reindex-PkmFromDisk.sh",
   "Merge-SqliteGitConflict.py",
   "Normalize-PkmDuplicatePaths.py",
+  "Refresh-SiteProductTrees.ps1",
+  "Refresh-SiteProductTrees.sh",
   "docker-compose.config.yml",
   "docker-compose.https.yml",
   "Caddyfile"
@@ -235,7 +274,9 @@ if ($refreshed.Count -gt 0) {
 $refreshHelper = Join-Path $upstream "Refresh-SiteProductTrees.ps1"
 if (Test-Path -LiteralPath $refreshHelper) {
   & $refreshHelper -Upstream $upstream -SiteRoot $siteRoot
-  Write-Host "Refreshed scriptkit, agent-context, docker examples."
+  Write-Host "Copied scriptkit/, agent-context/, docker examples onto the site root."
+} else {
+  Write-Warning "Refresh-SiteProductTrees.ps1 missing in upstream/; site-root scriptkit/ was not refreshed."
 }
 
 Set-Location $siteRoot

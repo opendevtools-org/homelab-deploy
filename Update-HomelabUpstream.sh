@@ -32,8 +32,13 @@ done
 PORTS_FILE="docker-compose.${PORTS}.yml"
 FRONTEND_PORTS_FILE="docker-compose.frontend.${PORTS}.yml"
 
+is_site_root() {
+  local d="$1"
+  [[ -f "$d/docker-compose.apps.yml" || -f "$d/docker-compose.custom.yml" || -f "$d/.env" || -d "$d/data" ]]
+}
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ "$(basename "$HERE")" == "upstream" && -f "$HERE/../docker-compose.apps.yml" ]]; then
+if [[ "$(basename "$HERE")" == "upstream" ]] && is_site_root "$(cd "$HERE/.." && pwd)"; then
   SITE_ROOT="$(cd "$HERE/.." && pwd)"
   UPSTREAM="$HERE"
 elif [[ -f "$HERE/upstream/docker-compose.yml" || -f "$HERE/upstream/docker-compose.backend.yml" ]]; then
@@ -59,6 +64,26 @@ git reset --hard origin/main
 REV="$(git rev-parse --short HEAD)"
 echo "Upstream  : $REV"
 
+# Site-root copies can predate new product trees (scriptkit/, agent-context/, …).
+# After pull, re-enter the updater that just landed in upstream/.
+if [[ -z "${HOMELAB_UPSTREAM_REEXEC:-}" ]]; then
+  canonical="$UPSTREAM/Update-HomelabUpstream.sh"
+  if [[ -f "$canonical" ]]; then
+    this="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
+    can="$(cd "$(dirname "$canonical")" && pwd)/$(basename "$canonical")"
+    if [[ "$this" != "$can" ]]; then
+      echo "Re-running updater from upstream/ so new product files are copied onto the site root."
+      export HOMELAB_UPSTREAM_REEXEC=1
+      reexec_args=()
+      [[ "$PORTS" != "lan" ]] && reexec_args+=(--ports "$PORTS")
+      [[ "$PUSH" -eq 1 ]] && reexec_args+=(--push)
+      [[ "$PUSH" -eq 0 && "$COMMIT" -eq 1 ]] && reexec_args+=(--commit)
+      [[ "$START" -eq 1 ]] && reexec_args+=(--start)
+      exec /bin/bash "$canonical" "${reexec_args[@]}"
+    fi
+  fi
+fi
+
 # Refresh site-root launchers from product package.
 # Also refreshes scriptkit/, agent-context/ (not site/), docker/*.example.
 # Never overwrites docker-compose.custom.yml, docker-compose.apps.yml,
@@ -78,6 +103,8 @@ LAUNCHERS=(
   Reindex-PkmFromDisk.ps1
   Merge-SqliteGitConflict.py
   Normalize-PkmDuplicatePaths.py
+  Refresh-SiteProductTrees.sh
+  Refresh-SiteProductTrees.ps1
   docker-compose.config.yml
   docker-compose.https.yml
   Caddyfile
@@ -144,7 +171,9 @@ fi
 if [[ -f "$UPSTREAM/Refresh-SiteProductTrees.sh" ]]; then
   chmod +x "$UPSTREAM/Refresh-SiteProductTrees.sh" 2>/dev/null || true
   /bin/bash "$UPSTREAM/Refresh-SiteProductTrees.sh" "$UPSTREAM" "$SITE_ROOT"
-  echo "Refreshed scriptkit, agent-context, docker examples."
+  echo "Copied scriptkit/, agent-context/, docker examples onto the site root."
+else
+  echo "Refresh-SiteProductTrees.sh missing in upstream/; site-root scriptkit/ was not refreshed." >&2
 fi
 
 cd "$SITE_ROOT"

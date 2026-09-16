@@ -614,6 +614,8 @@ foreach ($name in @(
   "Reindex-PkmFromDisk.sh",
   "Merge-SqliteGitConflict.py",
   "Normalize-PkmDuplicatePaths.py",
+  "Refresh-SiteProductTrees.ps1",
+  "Refresh-SiteProductTrees.sh",
   "docker-compose.config.yml",
   "docker-compose.https.yml",
   "Caddyfile"

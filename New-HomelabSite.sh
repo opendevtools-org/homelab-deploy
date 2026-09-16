@@ -387,6 +387,7 @@ for s in \
   Reindex-PkmFromDisk.sh Reindex-PkmFromDisk.ps1 \
   Merge-SqliteGitConflict.py \
   Normalize-PkmDuplicatePaths.py \
+  Refresh-SiteProductTrees.sh Refresh-SiteProductTrees.ps1 \
   docker-compose.config.yml docker-compose.https.yml Caddyfile
 do
   if [[ -f "$TARGET_DIR/upstream/$s" ]]; then

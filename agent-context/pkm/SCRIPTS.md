@@ -6,7 +6,11 @@ Two layers:
 |------|------|-------------------|
 | `cli/<name>/src/` | Real CLI (`argparse` commands) | kept (site) |
 | `data/pkm/scripts/<name>/` | PKM launcher + `manifest.json` | kept (site data) |
-| `scriptkit/odt_scripts/` | Shared library | refreshed |
+| `scriptkit/odt_scripts/` | Shared library | refreshed onto the **site root** |
+
+`Update-HomelabUpstream` copies this tree from `upstream/scriptkit` to `./scriptkit`.
+If you only see it under `upstream/`, the site-root updater was older than that
+step — run `./upstream/Update-HomelabUpstream.sh` (or `.ps1`) once.
 
 The PKM UI posts the form as JSON on **stdin**. The launcher must:
 
