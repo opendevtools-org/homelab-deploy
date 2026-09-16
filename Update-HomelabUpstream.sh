@@ -209,7 +209,7 @@ if [[ "$START" -eq 1 ]]; then
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
     -f docker-compose.custom.yml \
-    -f docker-compose.apps.yml up -d
+    -f docker-compose.apps.yml up -d --force-recreate
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \

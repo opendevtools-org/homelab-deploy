@@ -28,6 +28,8 @@ class CanonicalTests(unittest.TestCase):
     def test_strips_duplicate_dash_one_only(self) -> None:
         self.assertEqual(norm.canonical_path("notes/install-1/page.md"), "notes/install/page.md")
         self.assertEqual(norm.canonical_path("notes/install-1.md"), "notes/install.md")
+        self.assertEqual(norm.canonical_path("notes/page-1.md"), "notes/page.md")
+        self.assertEqual(norm.canonical_path("notes/ubuntu-22.md"), "notes/ubuntu-22.md")
         self.assertEqual(norm.canonical_path("notes/ubuntu-22/page"), "notes/ubuntu-22/page")
         self.assertEqual(norm.canonical_path("notes/item-11"), "notes/item-11")
 

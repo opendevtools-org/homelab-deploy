@@ -335,7 +335,7 @@ if ($Start) {
     )
     $code = Invoke-DockerCommand ($backendComposeArgs + @("pull"))
     if ($code -ne 0) { throw "docker compose pull failed" }
-    $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d"))
+    $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d", "--force-recreate"))
     if ($code -ne 0) { throw "docker compose up failed" }
     $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force", "--stop", "pkm-data-permissions", "site-cli-volumes-permissions"))
     $frontendComposeArgs = @(

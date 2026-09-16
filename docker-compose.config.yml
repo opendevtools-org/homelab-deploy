@@ -32,6 +32,11 @@ services:
       - |
         owner="$${PUID:-1000}:$${PGID:-1000}"
         mkdir -p /data/bookmarks
+        # mkdir runs as root. If recursive chown is skipped (world-writable
+        # bind mount), bookmarks would stay root:root and pkm-backend (PUID)
+        # cannot write. Always fix the directory we just created.
+        chown "$$owner" /data/bookmarks || true
+        chmod u+rwx /data/bookmarks || true
         marker=/data/.permissions-owner
         marked=$$(tr -d '\r' < "$$marker" 2>/dev/null || true)
         if [ "$$marked" = "$$owner" ]; then

@@ -81,7 +81,7 @@ def restore_positions(db_path: Path, snapshot_path: Path) -> int:
             for siblings in by_parent.values():
                 siblings.sort(key=lambda item: (item[1], item[0]))
                 previous_position = None
-                for _index, (path, position) in enumerate(siblings):
+                for path, position in siblings:
                     if previous_position is not None and position <= previous_position:
                         position = previous_position + 1
                     conn.execute(

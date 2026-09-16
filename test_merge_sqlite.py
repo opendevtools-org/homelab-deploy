@@ -23,7 +23,11 @@ def load_helper():
 merge = load_helper()
 
 
-def write_pkm_db(path: Path, pages: list[tuple[str, str, str]]) -> None:
+def write_pkm_db(
+    path: Path,
+    pages: list[tuple[str, str, str]],
+    users: list[tuple[str, str]] | None = None,
+) -> None:
     conn = sqlite3.connect(path)
     conn.execute(
         """
@@ -40,7 +44,9 @@ def write_pkm_db(path: Path, pages: list[tuple[str, str, str]]) -> None:
     conn.execute("CREATE TABLE pdf_documents (id TEXT PRIMARY KEY, indexed_at TEXT)")
     conn.execute("CREATE TABLE file_drive_links (id TEXT PRIMARY KEY, synced_at TEXT)")
     conn.executemany("INSERT INTO pages (id, title, updated_at) VALUES (?, ?, ?)", pages)
-    conn.execute("INSERT INTO users (id, username) VALUES ('u1', 'admin')")
+    if users is None:
+        users = [("u1", "admin")]
+    conn.executemany("INSERT INTO users (id, username) VALUES (?, ?)", users)
     conn.commit()
     conn.close()
 
@@ -90,6 +96,42 @@ class SqliteMergeTests(unittest.TestCase):
             }
             conn.close()
             self.assertEqual(titles["p2"], "Only local")
+
+    def test_user_deleted_locally_is_kept_from_remote(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            root = Path(tmp)
+            base = root / "base.db"
+            local = root / "local.db"
+            remote = root / "remote.db"
+            out = root / "merged.db"
+            pages = [("p1", "Hello", "2026-01-01T00:00:00")]
+            write_pkm_db(base, pages, users=[("u1", "admin")])
+            write_pkm_db(local, pages, users=[])
+            write_pkm_db(remote, pages, users=[("u1", "admin")])
+
+            merge.merge_databases(str(base), str(local), str(remote), str(out), "pkm")
+            conn = sqlite3.connect(out)
+            names = [row[0] for row in conn.execute("SELECT username FROM users")]
+            conn.close()
+            self.assertEqual(names, ["admin"])
+
+    def test_user_only_on_local_is_kept(self) -> None:
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+            root = Path(tmp)
+            base = root / "base.db"
+            local = root / "local.db"
+            remote = root / "remote.db"
+            out = root / "merged.db"
+            pages = [("p1", "Hello", "2026-01-01T00:00:00")]
+            write_pkm_db(base, pages, users=[("u1", "admin")])
+            write_pkm_db(local, pages, users=[("u1", "admin"), ("u2", "other")])
+            write_pkm_db(remote, pages, users=[("u1", "admin")])
+
+            merge.merge_databases(str(base), str(local), str(remote), str(out), "pkm")
+            conn = sqlite3.connect(out)
+            names = sorted(row[0] for row in conn.execute("SELECT username FROM users"))
+            conn.close()
+            self.assertEqual(names, ["admin", "other"])
 
 
 if __name__ == "__main__":

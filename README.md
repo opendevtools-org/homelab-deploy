@@ -95,7 +95,7 @@ Caddy uses a local CA (`tls internal`). Trust it once on each client:
 docker exec pkm-https cat /data/caddy/pki/authorities/local/root.crt
 ```
 
-Or replace `tls internal` in `Caddyfile` with a certificate you already trust. After changing `PUBLIC_PKM_URL`, recreate the backend as well.
+Or replace `tls internal` in `Caddyfile` with a certificate you already trust. After changing `PUBLIC_PKM_URL` in `.env`, recreate the backend so Platform seed writes the plugin `public_url` from env (`docker compose … up -d --force-recreate`, or `Update-HomelabUpstream --start`). A `up -d` without recreate can keep a stale URL inside the running container.
 
 Direct HTTP on `:3080` / `:3030` still works; use the HTTPS names for paste.
 
@@ -238,9 +238,14 @@ First start on a new host:
 
 1. `git submodule update --init --recursive upstream` (required: base compose lives in `upstream/`).
 2. Copy `.env.example` to `.env` and set `PLATFORM_SERVICE_TOKEN`, `HUB_JWT_SECRET`, and `JWT_SECRET`.
-3. If Compose reports a container name conflict (`home-hub`, `pkm-backend`, `pkm-frontend`), remove the leftover containers, then `up` again.
-4. If `pkm-backend` restarts with a permission error on `/app/data/bookmarks`, the data dir is not owned by `PUID`/`PGID`. Recreate with `docker-compose.config.yml` included, or `chown -R 1000:1000 data/pkm` on a Linux host (use the same ids as `.env`).
-5. From other machines, set `PUBLIC_PKM_URL` to the server IP or hostname, not `127.0.0.1`. For clipboard paste of images, use the LAN HTTPS overlay below.
+3. If Compose reports a container name conflict (`home-hub`, `home-hub-platform`, `pkm-backend`, `pkm-frontend`), leftover containers from a previous project name or a combined stack are still running. Remove them, then `up` again:
+
+   ```bash
+   docker rm -f home-hub home-hub-platform pkm-backend pkm-frontend
+   ```
+
+4. Always include `docker-compose.config.yml` with the backend `up`. That job creates `data/pkm/bookmarks` and sets its owner to `PUID`/`PGID` even when it skips a recursive `chown` on a world-writable bind mount. If `pkm-backend` still restarts with a permission error on `/app/data/bookmarks`, on a Linux host run `chown -R 1000:1000 data/pkm` (same ids as `.env`) and recreate the backend.
+5. From other machines, set `PUBLIC_PKM_URL` to the server IP or hostname, not `127.0.0.1`. Optionally set `PUBLIC_PKM_URL_HTTP` to the plain HTTP LAN URL when `PUBLIC_PKM_URL` is HTTPS. For clipboard paste of images, use the LAN HTTPS overlay below.
 
 Do not bind-mount whole Platform `main.py` / `config.py` into `docker-compose.custom.yml` or `docker-compose.apps.yml`. Prefer a new image (`HOMELAB_VERSION` / `PKM_VERSION`), a site `docker/<service>/Dockerfile` that `FROM`s the published image, or a small `overrides/*/sitecustomize.py` / `default.conf`.
 
@@ -270,7 +275,7 @@ No flags: only `git pull` in `upstream/`.
 
 Site instances only (`data/` is versioned). `New-HomelabSite` initializes a layered gitignore: `.gitignore.upstream` tracks this package, `.gitignore.custom` holds **only** site extras, and `.gitignore` is generated from both (do not edit it). `Update-HomelabUpstream` refreshes the upstream layer, so custom rules survive product updates. Commits and pushes `data/`, `docker-compose.custom.yml`, `docker-compose.apps.yml`, `overrides/`, and `README.md`. If someone else pushed to the same branch, the script tries `pull --rebase --autostash`, then falls back to merge.
 
-For `data/hub/platform.db` and `data/pkm/pkm.db`, Backup/Pull run a three-way SQLite row merge (`Merge-SqliteGitConflict.py`): rows present on only one side are kept; when the same row changed on both sides, the later `updated_at` (or equivalent timestamp) wins. FTS, locks, and runtime state are not merged; PKM rebuilds them on reindex. The merged file replaces the canonical db only after integrity and foreign-key checks. If Python or the helper is missing, or schemas differ, the conservative fallback applies: remote stays canonical and the local copy is saved next to it:
+For `data/hub/platform.db` and `data/pkm/pkm.db`, Backup/Pull run a three-way SQLite row merge (`Merge-SqliteGitConflict.py`): rows present on only one side are kept; when the same row changed on both sides, the later `updated_at` (or equivalent timestamp) wins. Rows in `users` and `user_app_grants` are never deleted if they still exist on the other side. FTS, locks, and runtime state are not merged; PKM rebuilds them on reindex. The merged file replaces the canonical db only after integrity and foreign-key checks. If Python or the helper is missing, or schemas differ, the conservative fallback applies: remote stays canonical and the local copy is saved next to it:
 
 ```text
 filename.local-conflict.HOSTNAME.20260820-143000.md
@@ -338,10 +343,17 @@ cp .env.example .env
 
 While in test/dev, publish overwrites only `:latest` (`HOMELAB_VERSION` / `PKM_VERSION` default `latest`). For a real release later, publish with an explicit semver (e.g. `1.0.0`) and pin that in `.env`.
 
+## Product CLIs
+
+`cli/lib/homelab_cli` is a company-agnostic library (Docker helpers, markdown command blocks, GitHub-compatible REST). `cli/cve` inspects nested JARs in a container and lists fixed CVEs. Library catalogs and the default scan root are JSON config, not code.
+
+```bash
+python cli/cve/main.py check-jar-version --jar log4j-core --container CONTAINER
+python cli/cve/main.py --config ./cve-sources.json check-fixed-cve --library openssl --version 3.0.16
+```
+
+Site instance: run `python upstream/cli/cve/main.py` from the site root. Keep company sources in a site file (copy `upstream/cli/cve/config/sources.example.json`). See [`cli/README.md`](./cli/README.md).
+
 ## License
 
 OpenDevTools End-User License — internal run/review; no redistribution of images or reuse of the implementation without agreement.
-
-## Site dump → generic product
-
-If a running site was patched by hand, drop the dump in gitignored `sugestions/` and run the agent prompt in [`EXTRACT-SITE-DUMP.md`](./EXTRACT-SITE-DUMP.md). Do not merge the dump tree as-is.

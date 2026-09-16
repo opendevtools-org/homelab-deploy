@@ -23,6 +23,9 @@ DATABASE_POLICIES = {
     },
 }
 
+# Union local and remote: never delete a user or grant that exists on one side.
+NON_DESTRUCTIVE_TABLES = frozenset({"users", "user_app_grants"})
+
 
 def quote_identifier(value):
     return '"' + value.replace('"', '""') + '"'
@@ -65,7 +68,12 @@ def read_rows(connection, table, columns, primary_key):
     return rows
 
 
-def choose_row(base, local, remote, timestamp_index):
+def choose_row(base, local, remote, timestamp_index, preserve_rows=False):
+    if preserve_rows:
+        if local is None:
+            return remote
+        if remote is None:
+            return local
     if local == remote:
         return local
     if local == base:
@@ -116,7 +124,11 @@ def merge_table(output, base, local, remote, table, timestamp_column):
     all_keys = set(base_rows) | set(local_rows) | set(remote_rows)
     for key in all_keys:
         desired = choose_row(
-            base_rows.get(key), local_rows.get(key), remote_rows.get(key), timestamp_index
+            base_rows.get(key),
+            local_rows.get(key),
+            remote_rows.get(key),
+            timestamp_index,
+            preserve_rows=table in NON_DESTRUCTIVE_TABLES,
         )
         if desired == remote_rows.get(key):
             continue

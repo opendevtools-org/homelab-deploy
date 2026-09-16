@@ -1,0 +1,9 @@
+{
+  "default_scan_root": "/",
+  "libraries": {
+    "openssl": {
+      "provider": "openssl",
+      "url": "https://openssl-library.org/news/vulnerabilities/index.html"
+    }
+  }
+}
