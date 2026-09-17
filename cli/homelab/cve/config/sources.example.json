@@ -1,0 +1,40 @@
+{
+  "default_scan_root": "/",
+  "libraries": {
+    "openssl": {
+      "provider": "openssl",
+      "cves_url": "https://openssl-library.org/news/vulnerabilities/index.html",
+      "release_notes_url": "https://openssl-library.org/news/changelog/"
+    },
+    "curl": {
+      "provider": "curl",
+      "cves_url": "https://curl.se/docs/security.html",
+      "release_notes_url": "https://curl.se/docs/releases.html"
+    },
+    "apache-cxf": {
+      "provider": "cxf",
+      "cves_url": "https://cxf.apache.org/security-advisories.html",
+      "release_notes_url": "https://cxf.apache.org/download.html"
+    },
+    "go": {
+      "provider": "go",
+      "cves_url": "https://vuln.go.dev/index/vulns.json",
+      "release_notes_url": "https://go.dev/doc/devel/release"
+    },
+    "kubernetes": {
+      "provider": "kubernetes",
+      "cves_url": "https://kubernetes.io/docs/reference/issues-security/official-cve-feed/",
+      "release_notes_url": "https://kubernetes.io/releases/"
+    },
+    "python": {
+      "provider": "python",
+      "cves_url": "https://nvd.nist.gov/",
+      "release_notes_url": "https://www.python.org/downloads/"
+    },
+    "semeru": {
+      "provider": "semeru",
+      "cves_url": "https://www.ibm.com/support/pages/semeru-runtimes-security-vulnerabilities",
+      "release_notes_url": "https://www.ibm.com/support/pages/semeru-runtimes-security-vulnerabilities"
+    }
+  }
+}

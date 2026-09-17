@@ -5,8 +5,11 @@ After Python or manifest edits:
 ```bash
 python -m py_compile path/to/file.py
 python -m unittest discover -s scriptkit/tests
+python -m unittest discover -s cli/custom/tests -p "test_*.py"
 python -c "import json; json.load(open('data/pkm/scripts/NAME/manifest.json', encoding='utf-8')); print('manifest ok')"
 ```
+
+From `cli/` the deploy CLI smoke (help + unit tests, no Docker) is `./smoke.ps1` when the site copied it; product tests live in `cli/custom/tests`.
 
 PKM launcher checks:
 

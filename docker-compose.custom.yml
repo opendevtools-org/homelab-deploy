@@ -1,7 +1,18 @@
-# Site Hub/PKM image overlay. Empty by default.
+# Site Hub/PKM overlay.
 # Always included with the backend compose (see README).
 # Site-owned: Update-HomelabUpstream does not overwrite this file.
-# Copy snippets from docker-compose.custom.example.yml (build, cli/scriptkit mounts).
 # One-shot chown of named volumes lives in docker-compose.config.yml, not here.
 
-services: {}
+services:
+  pkm-backend:
+    volumes:
+      - "site-cli-cache:/app/cache"
+      - "site-cli-home:/app/home"
+      - ./cli:/app/cli:ro
+      - ./scriptkit:/app/scriptkit:ro
+    environment:
+      PYTHONUNBUFFERED: "1"
+      PYTHONPATH: /app/scriptkit:/app/cli/lib:/app/cli:/overrides
+      HOME: /app/home
+      HOMELAB_CLI_ROOT: /app/cli
+      HOMELAB_CVE_CONFIG: /app/cli/homelab/cve/config/sources.example.json

@@ -65,6 +65,17 @@ Copy-ProductTree -Source (Join-Path $Upstream "scriptkit") -Destination (Join-Pa
 Copy-ProductTree -Source (Join-Path $Upstream "agent-context") -Destination (Join-Path $SiteRoot "agent-context") -SkipPrefix "site"
 Copy-DockerExamples -Source (Join-Path $Upstream "docker") -Destination (Join-Path $SiteRoot "docker")
 
+$pkmScripts = Join-Path $Upstream "pkm-scripts"
+$pkmDestRoot = Join-Path $SiteRoot "data\pkm\scripts"
+if (Test-Path -LiteralPath $pkmScripts) {
+  New-Item -ItemType Directory -Path $pkmDestRoot -Force | Out-Null
+  Get-ChildItem -LiteralPath $pkmScripts -Directory -Force | ForEach-Object {
+    $dest = Join-Path $pkmDestRoot $_.Name
+    if (Test-Path -LiteralPath (Join-Path $dest "manifest.json")) { return }
+    Copy-ProductTree -Source $_.FullName -Destination $dest
+  }
+}
+
 $exampleApps = Join-Path $Upstream "docker-compose.apps.example.yml"
 if (Test-Path -LiteralPath $exampleApps) {
   Copy-Item -LiteralPath $exampleApps -Destination (Join-Path $SiteRoot "docker-compose.apps.example.yml") -Force

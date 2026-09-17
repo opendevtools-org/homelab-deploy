@@ -1,18 +1,16 @@
 # Product CLIs
 
-Generic tools shipped with this package. They have **no company hostnames, registries, or product paths**.
-
 | Path | Role |
 |------|------|
-| `cli/lib/homelab_cli/` | Library: Docker name lookup, markdown command blocks, compose hash, GitHub-compatible REST |
-| `cli/cve/` | CVE / nested-JAR inspector. Extra libraries and default scan root come from **JSON config**, not from code |
-
-Site instance (after `New-HomelabSite`): run from the site root against the submodule:
+| `cli/lib/` | Generic helpers by domain (`term`, `containers`, `github`, `compose`, `mdblocks`, `env`, `net`, `markup`, `versions`). Not tied to CVE or any CLI. |
+| `cli/homelab/` | Default Home Lab CLIs (`cve`, …) |
+| `cli/custom/` | Site overlay: wrappers + tests |
 
 ```bash
-python upstream/cli/cve/main.py --config ./cve-sources.json check-fixed-cve --library openssl --version 3.0.16
+cd cli
+python -m unittest discover -s custom/tests -p "test_*.py"
+PYTHONPATH=lib:. python -m homelab.cve check-fixed-cve --library openssl --version 3.0.16
+python custom/cve/main.py lookup-cve --cve CVE-2024-0001
 ```
 
-Copy `upstream/cli/cve/config/sources.example.json` to `./cve-sources.json` on the site and edit URLs or `default_scan_root`. That file stays in the **site** git remote, not in this product repo.
-
-A company wrapper CLI (defaults, extra subcommands) should import `homelab_cli` / `homelab_cve` and keep company names out of the library.
+Copy `homelab/cve/config/sources.example.json` to the site. Optional `NVD_API_KEY` or `HOMELAB_CVE_DOTENV`.

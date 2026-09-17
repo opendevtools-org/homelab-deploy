@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -76,6 +78,15 @@ class CliAndLauncherTests(unittest.TestCase):
         self.assertEqual(code, 0)
         payload = json.loads(out.getvalue())
         self.assertEqual(payload["echo"], {"hello": "world"})
+
+
+    def test_stream_forwards_lines(self):
+        from odt_scripts.process import stream
+
+        with patch("odt_scripts.process.sys.stdout", new_callable=io.StringIO) as out:
+            code = stream([sys.executable, "-u", "-c", "print('live-line', flush=True)"])
+        self.assertEqual(code, 0)
+        self.assertIn("live-line", out.getvalue())
 
 
 if __name__ == "__main__":

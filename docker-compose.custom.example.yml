@@ -27,5 +27,7 @@ services:
       - ./scriptkit:/app/scriptkit:ro
     environment:
       PYTHONUNBUFFERED: "1"
-      PYTHONPATH: /app/scriptkit:/overrides
+      PYTHONPATH: /app/scriptkit:/app/cli/lib:/app/cli:/overrides
       HOME: /app/home
+      HOMELAB_CLI_ROOT: /app/cli
+      HOMELAB_CVE_CONFIG: /app/cli/homelab/cve/config/sources.example.json

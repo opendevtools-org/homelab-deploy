@@ -1,0 +1,95 @@
+{
+  "id": "cve",
+  "name": "CVE CLI",
+  "description": "Run the Home Lab CVE CLI. Fields change with the selected command.",
+  "command": ["python", "-u", "run.py"],
+  "parameters": [
+    {
+      "name": "command",
+      "type": "select",
+      "label": "Command",
+      "required": true,
+      "default": "lookup-cve",
+      "options": [
+        { "value": "lookup-cve", "label": "Lookup advisory" },
+        { "value": "check-fixed-cve", "label": "Fixed CVEs for a library" },
+        { "value": "check-jar-version", "label": "Find JAR in a container" },
+        { "value": "compare-inventory", "label": "Compare inventory" }
+      ]
+    },
+    {
+      "name": "cve",
+      "type": "text",
+      "label": "CVE / GO ids",
+      "required": false,
+      "required_if": { "param": "command", "equals": "lookup-cve" },
+      "depends_on": { "param": "command", "equals": "lookup-cve" }
+    },
+    {
+      "name": "library",
+      "type": "text",
+      "label": "Library",
+      "required": false,
+      "required_if": { "param": "command", "equals": "check-fixed-cve" },
+      "depends_on": { "param": "command", "equals": "check-fixed-cve" }
+    },
+    {
+      "name": "version",
+      "type": "text",
+      "label": "Version",
+      "required": false,
+      "required_if": { "param": "command", "equals": "check-fixed-cve" },
+      "depends_on": { "param": "command", "equals": "check-fixed-cve" }
+    },
+    {
+      "name": "jar",
+      "type": "text",
+      "label": "JAR name",
+      "required": false,
+      "required_if": { "param": "command", "equals": "check-jar-version" },
+      "depends_on": { "param": "command", "equals": "check-jar-version" }
+    },
+    {
+      "name": "container",
+      "type": "text",
+      "label": "Container",
+      "required": false,
+      "required_if": { "param": "command", "equals": "check-jar-version" },
+      "depends_on": { "param": "command", "equals": "check-jar-version" }
+    },
+    {
+      "name": "root",
+      "type": "text",
+      "label": "Scan root",
+      "required": false,
+      "depends_on": { "param": "command", "equals": "check-jar-version" }
+    },
+    {
+      "name": "no_color",
+      "type": "boolean",
+      "label": "No color",
+      "required": false,
+      "default": true,
+      "depends_on": { "param": "command", "equals": "check-jar-version" }
+    },
+    {
+      "name": "compare_cve",
+      "type": "text",
+      "label": "CVE / GO ids",
+      "required": false,
+      "required_if": { "param": "command", "equals": "compare-inventory" },
+      "depends_on": { "param": "command", "equals": "compare-inventory" }
+    },
+    {
+      "name": "compare_inventory",
+      "type": "text",
+      "label": "Inventory JSON path",
+      "required": false,
+      "required_if": { "param": "command", "equals": "compare-inventory" },
+      "depends_on": { "param": "command", "equals": "compare-inventory" }
+    }
+  ],
+  "timeout_seconds": 600,
+  "allowed_roles": ["admin", "editor"],
+  "hidden": false
+}

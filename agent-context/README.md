@@ -7,7 +7,8 @@ in this folder are refreshed by `Update-HomelabUpstream`. Site-only notes go in
 ## Hub / PKM (product)
 
 - [Docker Compose](hub/DOCKER-COMPOSE.md): overlays, named volumes, `.env`.
-- [PKM scripts and CLIs](pkm/SCRIPTS.md): `cli/`, launchers, `odt_scripts`.
+- [PKM scripts and CLIs](pkm/SCRIPTS.md): PKM launchers, `odt_scripts`.
+- [Deploy CLIs](cli/README.md): `cli/lib`, `cli/homelab`, `cli/custom`.
 - [Validation](pkm/VALIDATION.md): compile, unittest, `compose config`.
 
 Read only the files that match the change. Do not load the whole site tree.

@@ -357,14 +357,14 @@ While in test/dev, publish overwrites only `:latest` (`HOMELAB_VERSION` / `PKM_V
 
 ## Product CLIs
 
-`cli/lib/homelab_cli` is a company-agnostic library (Docker helpers, markdown command blocks, GitHub-compatible REST). `cli/cve` inspects nested JARs in a container and lists fixed CVEs. Library catalogs and the default scan root are JSON config, not code.
+`cli/lib` holds generic helpers by domain (HTTP, HTML, GitHub, containers, …). `cli/homelab/cve` is the default CVE CLI.
 
 ```bash
-python cli/cve/main.py check-jar-version --jar log4j-core --container CONTAINER
-python cli/cve/main.py --config ./cve-sources.json check-fixed-cve --library openssl --version 3.0.16
+PYTHONPATH=cli/lib:cli python -m homelab.cve check-jar-version --jar log4j-core --container CONTAINER
+PYTHONPATH=cli/lib:cli python -m homelab.cve --config ./cve-sources.json check-fixed-cve --library openssl --version 3.0.16
 ```
 
-Site instance: run `python upstream/cli/cve/main.py` from the site root. Keep company sources in a site file (copy `upstream/cli/cve/config/sources.example.json`). See [`cli/README.md`](./cli/README.md).
+Site instance: `python custom/cve/main.py`. Copy `upstream/cli/homelab/cve/config/sources.example.json`. See [`cli/README.md`](./cli/README.md).
 
 ## License
 

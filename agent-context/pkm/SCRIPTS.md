@@ -1,10 +1,15 @@
 # PKM scripts and site CLIs
 
-Two layers:
+Two different `cli/` uses:
+
+1. **Deploy CLIs** (`cli/lib`, `cli/homelab`, `cli/custom`) — see [../cli/README.md](../cli/README.md).
+2. **PKM portal tools** (below) — form JSON on stdin, `odt_scripts` launcher.
+
+## PKM portal tools
 
 | Path | Role | On product update |
 |------|------|-------------------|
-| `cli/<name>/src/` | Real CLI (`argparse` commands) | kept (site) |
+| `cli/<name>/src/` | Real CLI (`argparse` commands) for a PKM script | kept (site) |
 | `data/pkm/scripts/<name>/` | PKM launcher + `manifest.json` | kept (site data) |
 | `scriptkit/odt_scripts/` | Shared library | refreshed onto the **site root** |
 
@@ -43,3 +48,10 @@ Mounts (from `docker-compose.custom.example.yml`):
 Copy `scriptkit/examples/echo_cli/` into `cli/<name>/` and
 `data/pkm/scripts/<name>/` when adding a tool. Extra OS packages (Java, Maven)
 go in `docker/pkm-backend/Dockerfile`, not in the library.
+
+Default Home Lab CVE tool: product files in `pkm-scripts/cve/` are copied onto
+`data/pkm/scripts/cve/` on first site convert (not overwritten later). The
+launcher reads the PKM form JSON and streams `python -u -m homelab.cve …`
+line by line. Mount `cli/` and `scriptkit/` as in `docker-compose.custom.yml`.
+`check-jar-version` needs the Docker CLI inside the PKM image plus the socket
+already mounted on `pkm-backend`.
