@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copies site data from origin, keeping local PKM scripts and page order.
+# Copies site data from origin, keeping local PKM scripts. Page order comes from origin.
 # Run from the site instance root or from upstream/.
 #
 # Usage:
@@ -94,7 +94,7 @@ snapshot_pkm_positions() {
   [[ -f "$db" ]] || return 0
   PKM_POSITION_SNAPSHOT="$(mktemp "${TMPDIR:-/tmp}/homelab-pkm-positions.XXXXXX.json")"
   if pkm_dup_py snapshot --db "$db" --out "$PKM_POSITION_SNAPSHOT" >/dev/null; then
-    echo "Saved local PKM page order."
+    echo "Saved origin PKM page order."
   else
     rm -f -- "$PKM_POSITION_SNAPSHOT"
     PKM_POSITION_SNAPSHOT=""
@@ -106,7 +106,7 @@ restore_pkm_positions() {
   [[ -n "$PKM_POSITION_SNAPSHOT" && -f "$PKM_POSITION_SNAPSHOT" && -f "$db" ]] || return 0
   out="$(pkm_dup_py restore --db "$db" --from-json "$PKM_POSITION_SNAPSHOT" || true)"
   [[ "$out" == restored\ 0\ * || -z "$out" ]] && return 0
-  echo "Restored local PKM page order."
+  echo "Restored origin PKM page order."
 }
 
 clear_pkm_sqlite_sidecars() {
@@ -156,7 +156,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-snapshot_pkm_positions
 stop_pkm_if_present
 
 git_auth fetch origin "$BRANCH"
@@ -171,8 +170,9 @@ if [[ "$HAD_SCRIPTS" -eq 1 ]]; then
   echo "Restored local data/pkm/scripts (not overwritten from origin)."
 fi
 
+snapshot_pkm_positions
 restore_pkm_positions
 reindex_pkm
 restore_pkm_positions
 
-echo "Done. Local scripts and page order kept; other data/ matches origin. Nothing was committed or pushed."
+echo "Done. Local scripts kept; page order and other data/ match origin. Nothing was committed or pushed."

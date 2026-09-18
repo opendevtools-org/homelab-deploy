@@ -1,13 +1,13 @@
 <#
 .SYNOPSIS
-  Copies site data from origin into the local working tree, keeping local PKM scripts
-  and the local PKM page folder order.
+  Copies site data from origin into the local working tree, keeping local PKM scripts.
+  Page folder order comes from origin (pkm.db pages.position).
 
 .DESCRIPTION
   Run from the site instance root (folder with data/, .git), or from upstream/.
   Fetches origin and restores data/ from the current branch. data/pkm/scripts is
-  copied aside and put back. pages.position is snapshotted first and reapplied
-  after restore/reindex so the sidebar order stays the local one.
+  copied aside and put back. After restore, origin pages.position is snapshotted
+  and reapplied after reindex so the sidebar matches remote.
   Stops PKM before replacing pkm.db so SQLite WAL cannot keep a stale order.
   Does not commit or push.
 
@@ -120,7 +120,7 @@ function Save-PkmPositions {
     return
   }
   $script:pkmPositionSnapshot = $tmp
-  Write-Host "Saved local PKM page order."
+  Write-Host "Saved origin PKM page order."
 }
 
 function Restore-PkmPositions {
@@ -130,7 +130,7 @@ function Restore-PkmPositions {
   }
   $out = Invoke-PkmDupHelper -HelperArgs @("restore", "--db", $db, "--from-json", $script:pkmPositionSnapshot)
   if ([string]::IsNullOrWhiteSpace($out) -or $out -match "^restored 0 ") { return }
-  Write-Host "Restored local PKM page order."
+  Write-Host "Restored origin PKM page order."
 }
 
 function Clear-PkmSqliteSidecars {
@@ -214,7 +214,6 @@ if ($hadScripts) {
   Write-Host "Saved local data/pkm/scripts aside."
 }
 
-Save-PkmPositions
 Stop-PkmIfPresent
 
 try {
@@ -237,6 +236,7 @@ try {
     Write-Host "Restored local data/pkm/scripts (not overwritten from origin)."
   }
 
+  Save-PkmPositions
   Restore-PkmPositions
   Invoke-PkmDiskReindex
   Restore-PkmPositions
@@ -250,4 +250,4 @@ finally {
   }
 }
 
-Write-Host "Done. Local scripts and page order kept; other data/ matches origin. Nothing was committed or pushed."
+Write-Host "Done. Local scripts kept; page order and other data/ match origin. Nothing was committed or pushed."
