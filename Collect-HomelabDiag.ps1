@@ -29,6 +29,12 @@ if ((Split-Path -Leaf $here) -eq "upstream" -and (Test-HomelabSiteRoot (Split-Pa
 }
 Set-Location $root
 
+$logDir = Join-Path $root "logs"
+New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+$diagFile = Join-Path $logDir ("homelab-diag-{0}.txt" -f (Get-Date -Format "yyyyMMdd-HHmmss"))
+Start-Transcript -Path $diagFile -Force | Out-Null
+try {
+
 function Write-Section([string]$Name) { Write-Host ""; Write-Host ("== {0} ==" -f $Name) }
 
 Write-Section "host"
@@ -149,4 +155,9 @@ if (Get-Command docker -ErrorAction SilentlyContinue) {
 }
 
 Write-Host ""
+Write-Host ("Wrote {0}" -f $diagFile)
 Write-Host "Done. Paste this output (it has no file contents and no passwords)."
+
+} finally {
+  Stop-Transcript | Out-Null
+}

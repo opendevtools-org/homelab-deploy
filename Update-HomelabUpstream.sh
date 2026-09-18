@@ -64,6 +64,19 @@ git reset --hard origin/main
 REV="$(git rev-parse --short HEAD)"
 echo "Upstream  : $REV"
 
+for n in Collect-HomelabDiag.sh Collect-HomelabDiag.ps1; do
+  if [[ -f "$UPSTREAM/$n" ]]; then
+    cp -a "$UPSTREAM/$n" "$SITE_ROOT/$n"
+    [[ "$n" == *.sh ]] && chmod +x "$SITE_ROOT/$n"
+    echo "Copied $n to site root."
+  fi
+done
+echo -n "Upstream files:"
+for n in docker-compose.backend.yml Collect-HomelabDiag.sh Update-HomelabUpstream.sh; do
+  if [[ -f "$UPSTREAM/$n" ]]; then echo -n " $n=yes"; else echo -n " $n=NO"; fi
+done
+echo
+
 # Site-root copies can predate new product trees (scriptkit/, agent-context/, …).
 # After pull, re-enter the updater that just landed in upstream/.
 if [[ -z "${HOMELAB_UPSTREAM_REEXEC:-}" ]]; then

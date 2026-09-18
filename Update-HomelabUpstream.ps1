@@ -206,6 +206,17 @@ Invoke-Git reset --hard origin/main | Out-Null
 $rev = (Invoke-Git rev-parse --short HEAD | Select-Object -Last 1).ToString().Trim()
 Write-Host ("Upstream  : {0}" -f $rev)
 
+foreach ($n in @("Collect-HomelabDiag.ps1", "Collect-HomelabDiag.sh")) {
+  $src = Join-Path $upstream $n
+  if (Test-Path -LiteralPath $src) {
+    Copy-Item -LiteralPath $src -Destination (Join-Path $siteRoot $n) -Force
+    Write-Host ("Copied {0} to site root." -f $n)
+  }
+}
+$probe = @("docker-compose.backend.yml", "Collect-HomelabDiag.ps1", "Update-HomelabUpstream.ps1")
+$probeText = ($probe | ForEach-Object { "{0}={1}" -f $_, (Test-Path -LiteralPath (Join-Path $upstream $_)) }) -join ", "
+Write-Host ("Upstream files: {0}" -f $probeText)
+
 # Site-root copies can predate new product trees (scriptkit/, agent-context/, …).
 # After pull, re-enter the updater that just landed in upstream/ so those
 # copies always run, even when this process started from an older site-root file.

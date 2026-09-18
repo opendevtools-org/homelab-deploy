@@ -83,4 +83,4 @@ Restores `data/pkm` from `origin/<branch>` on the site root (drops extra local P
 # Windows: .\Collect-HomelabDiag.ps1
 ```
 
-Paste the output. It lists mounts, plugin ids, PKM folder order, and compose mentions of Guacamole. It does not print document bodies or passwords.
+Writes `logs/homelab-diag-*.txt` (gitignored) and prints the same text. Paste the output or that file.

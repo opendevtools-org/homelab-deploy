@@ -20,6 +20,11 @@ else
 fi
 cd "$ROOT"
 
+mkdir -p "$ROOT/logs"
+OUT="$ROOT/logs/homelab-diag-$(date +%Y%m%d-%H%M%S).txt"
+exec > >(tee "$OUT") 2>&1
+echo "Writing $OUT"
+
 redact_url() {
   python3 -c 'import re,sys; print(re.sub(r"://[^/@]+@", "://***@", sys.argv[1] if len(sys.argv)>1 else ""))' "${1:-}" 2>/dev/null || echo "(url hidden)"
 }
@@ -134,4 +139,5 @@ else
 fi
 
 echo
+echo "Wrote $OUT"
 echo "Done. Paste this output (it has no file contents and no passwords)."
