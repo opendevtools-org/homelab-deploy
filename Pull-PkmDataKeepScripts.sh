@@ -139,6 +139,13 @@ stop_pkm_if_present() {
   docker stop "$container" >/dev/null 2>&1 || true
 }
 
+start_pkm_if_present() {
+  local container="${HOMELAB_PKM_CONTAINER:-pkm-backend}"
+  command -v docker >/dev/null 2>&1 || return 0
+  docker inspect "$container" >/dev/null 2>&1 || return 0
+  docker start "$container" >/dev/null 2>&1 || true
+}
+
 reindex_pkm() {
   local helper="$REPO_ROOT/Reindex-PkmFromDisk.sh"
   [[ -f "$helper" ]] || helper="$REPO_ROOT/upstream/Reindex-PkmFromDisk.sh"
@@ -190,9 +197,8 @@ if [[ "$HAD_SCRIPTS" -eq 1 ]]; then
   echo "Restored local data/pkm/scripts (not overwritten from origin)."
 fi
 
-snapshot_pkm_positions
-restore_pkm_positions
-reindex_pkm
-restore_pkm_positions
+# Origin pkm.db already has page order. Disk reindex would re-import extra
+# local folders and reset positions to 1.0.
+start_pkm_if_present
 
 echo "Done. Local scripts kept; PKM tree/order match origin. Hub/Guacamole were not overwritten."

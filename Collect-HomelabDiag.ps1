@@ -111,8 +111,11 @@ else:
     pos = 'position' if 'position' in cols else None
     if title and pos:
         sel = ', '.join(x for x in (title, path, pos) if x)
-        rows = c.execute(f'SELECT {sel} FROM pages ORDER BY {pos}, {title} LIMIT 50').fetchall()
-        print('count_preview', len(rows))
+        where = ""
+        if "parent_id" in cols:
+            where = " WHERE parent_id IS NULL OR parent_id = ''"
+        rows = c.execute(f"SELECT {sel} FROM pages{where} ORDER BY {pos}, {title} LIMIT 80").fetchall()
+        print("sidebar_roots", len(rows))
         for r in rows:
             print('|'.join('' if x is None else str(x) for x in r))
     else:

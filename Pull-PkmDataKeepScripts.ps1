@@ -193,6 +193,15 @@ function Stop-PkmIfPresent {
   $ErrorActionPreference = $prev
 }
 
+function Start-PkmIfPresent {
+  $container = Get-PkmContainer
+  if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & docker start $container 2>&1 | Out-Null
+  $ErrorActionPreference = $prev
+}
+
 function Invoke-PkmDiskReindex {
   $helper = Join-Path $repoRoot "Reindex-PkmFromDisk.ps1"
   if (-not (Test-Path $helper)) {
@@ -267,10 +276,9 @@ try {
     Write-Host "Restored local data/pkm/scripts (not overwritten from origin)."
   }
 
-  Save-PkmPositions
-  Restore-PkmPositions
-  Invoke-PkmDiskReindex
-  Restore-PkmPositions
+  # Origin pkm.db already has page order. Disk reindex would re-import extra
+  # local folders and reset positions to 1.0.
+  Start-PkmIfPresent
 }
 finally {
   if ($script:pkmPositionSnapshot -and (Test-Path $script:pkmPositionSnapshot)) {
