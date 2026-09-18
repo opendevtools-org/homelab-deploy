@@ -1,19 +1,18 @@
 <#
 .SYNOPSIS
-  Copies site data from origin into the local working tree, keeping local PKM scripts.
+  Copies site data from origin into the local working tree, keeping local PKM scripts
+  and the local PKM page folder order.
 
 .DESCRIPTION
   Run from the site instance root (folder with data/, .git), or from upstream/.
-  Always targets the site root: fetches origin and restores data/ from the
-  current branch (docs, files, PDFs, bookmarks, SQLite, Hub DB, etc.).
-  data/pkm/scripts is copied aside first and put back so local script edits
-  are not overwritten. Does not commit or push.
+  Fetches origin and restores data/ from the current branch. data/pkm/scripts is
+  copied aside and put back. pages.position is snapshotted first and reapplied
+  after restore/reindex so the sidebar order stays the local one.
+  Stops PKM before replacing pkm.db so SQLite WAL cannot keep a stale order.
+  Does not commit or push.
 
 .EXAMPLE
   .\Pull-PkmDataKeepScripts.ps1
-
-.EXAMPLE
-  .\upstream\Pull-PkmDataKeepScripts.ps1
 #>
 [CmdletBinding()]
 param()
@@ -21,6 +20,7 @@ param()
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 $script:gitExtraArgs = @()
+$script:pkmPositionSnapshot = $null
 
 function Test-HomelabSiteRoot([string]$Dir) {
   foreach ($name in @("docker-compose.apps.yml", "docker-compose.custom.yml", ".env")) {
@@ -78,6 +78,107 @@ function Invoke-Git {
   return $output
 }
 
+function Get-Python {
+  foreach ($name in @("python3", "python")) {
+    $cmd = Get-Command $name -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+  }
+  return $null
+}
+
+function Get-PkmDupHelper {
+  foreach ($rel in @("Normalize-PkmDuplicatePaths.py", "upstream\Normalize-PkmDuplicatePaths.py")) {
+    $p = Join-Path $repoRoot $rel
+    if (Test-Path $p) { return $p }
+  }
+  return $null
+}
+
+function Invoke-PkmDupHelper {
+  param([string[]]$HelperArgs)
+  $helper = Get-PkmDupHelper
+  if ([string]::IsNullOrWhiteSpace($helper)) { return $null }
+  $py = Get-Python
+  if (-not $py) { return $null }
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $output = & $py $helper @HelperArgs 2>&1
+  $code = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+  if ($code -ne 0) { return $null }
+  return ($output | Out-String).Trim()
+}
+
+function Save-PkmPositions {
+  $db = Join-Path $repoRoot "data\pkm\pkm.db"
+  $script:pkmPositionSnapshot = $null
+  if (-not (Test-Path $db)) { return }
+  $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ("homelab-pkm-positions-{0}.json" -f [guid]::NewGuid().ToString("n"))
+  $out = Invoke-PkmDupHelper -HelperArgs @("snapshot", "--db", $db, "--out", $tmp)
+  if ($null -eq $out) {
+    if (Test-Path $tmp) { Remove-Item $tmp -Force }
+    return
+  }
+  $script:pkmPositionSnapshot = $tmp
+  Write-Host "Saved local PKM page order."
+}
+
+function Restore-PkmPositions {
+  $db = Join-Path $repoRoot "data\pkm\pkm.db"
+  if ([string]::IsNullOrWhiteSpace($script:pkmPositionSnapshot) -or -not (Test-Path $script:pkmPositionSnapshot)) {
+    return
+  }
+  $out = Invoke-PkmDupHelper -HelperArgs @("restore", "--db", $db, "--from-json", $script:pkmPositionSnapshot)
+  if ([string]::IsNullOrWhiteSpace($out) -or $out -match "^restored 0 ") { return }
+  Write-Host "Restored local PKM page order."
+}
+
+function Clear-PkmSqliteSidecars {
+  $db = Join-Path $repoRoot "data\pkm\pkm.db"
+  foreach ($ext in @("-wal", "-shm")) {
+    $side = $db + $ext
+    if (Test-Path $side) {
+      Remove-Item -LiteralPath $side -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
+function Get-PkmContainer {
+  $container = [Environment]::GetEnvironmentVariable("HOMELAB_PKM_CONTAINER")
+  if ([string]::IsNullOrWhiteSpace($container)) { return "pkm-backend" }
+  return $container
+}
+
+function Stop-PkmIfPresent {
+  $container = Get-PkmContainer
+  if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & docker inspect $container 2>&1 | Out-Null
+  $exists = $LASTEXITCODE -eq 0
+  $ErrorActionPreference = $prev
+  if (-not $exists) { return }
+  Write-Host ("Stopping {0} before replacing pkm.db." -f $container)
+  $ErrorActionPreference = "Continue"
+  & docker stop $container 2>&1 | Out-Null
+  $ErrorActionPreference = $prev
+}
+
+function Invoke-PkmDiskReindex {
+  $helper = Join-Path $repoRoot "Reindex-PkmFromDisk.ps1"
+  if (-not (Test-Path $helper)) {
+    $helper = Join-Path $repoRoot "upstream\Reindex-PkmFromDisk.ps1"
+  }
+  if (-not (Test-Path $helper)) { return }
+  $shell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $output = & $shell -NoProfile -ExecutionPolicy Bypass -File $helper 2>&1
+  $ErrorActionPreference = $prev
+  $text = ($output | Out-String).Trim()
+  if ($text) { Write-Host $text }
+}
+
 $here = $PSScriptRoot
 if ((Split-Path -Leaf $here) -eq "upstream" -and (Test-HomelabSiteRoot (Split-Path -Parent $here))) {
   $repoRoot = Split-Path -Parent $here
@@ -113,10 +214,14 @@ if ($hadScripts) {
   Write-Host "Saved local data/pkm/scripts aside."
 }
 
+Save-PkmPositions
+Stop-PkmIfPresent
+
 try {
   Invoke-Git fetch origin $branch | Out-Null
   $source = "origin/{0}" -f $branch
   Invoke-Git restore --source $source --worktree -- "data" | Out-Null
+  Clear-PkmSqliteSidecars
   Write-Host ("Restored data/ from {0} (working tree only, site root {1})." -f $source, $repoRoot)
 
   if ($hadScripts) {
@@ -131,11 +236,18 @@ try {
     Copy-Item -LiteralPath (Join-Path $keepDir "scripts") -Destination $restored -Recurse -Force
     Write-Host "Restored local data/pkm/scripts (not overwritten from origin)."
   }
+
+  Restore-PkmPositions
+  Invoke-PkmDiskReindex
+  Restore-PkmPositions
 }
 finally {
+  if ($script:pkmPositionSnapshot -and (Test-Path $script:pkmPositionSnapshot)) {
+    Remove-Item $script:pkmPositionSnapshot -Force -ErrorAction SilentlyContinue
+  }
   if (Test-Path $keepDir) {
     Remove-Item -LiteralPath $keepDir -Recurse -Force -ErrorAction SilentlyContinue
   }
 }
 
-Write-Host "Done. Local scripts kept; other data/ matches origin. Nothing was committed or pushed."
+Write-Host "Done. Local scripts and page order kept; other data/ matches origin. Nothing was committed or pushed."

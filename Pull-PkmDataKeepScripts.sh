@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Copies site data from origin into the local working tree, keeping local PKM scripts.
-# Run from the site instance root or from upstream/. Always operates on the site
-# root (parent of upstream/): restores data/ from origin/<current-branch>.
-# data/pkm/scripts is copied aside and put back. Does not commit or push.
+# Copies site data from origin, keeping local PKM scripts and page order.
+# Run from the site instance root or from upstream/.
 #
 # Usage:
 #   ./Pull-PkmDataKeepScripts.sh
@@ -11,6 +9,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 GIT_AUTH_ARGS=()
+PKM_POSITION_SNAPSHOT=""
 
 is_site_root() {
   local dir="$1"
@@ -68,6 +67,68 @@ git_auth() {
   git "${GIT_AUTH_ARGS[@]}" "$@"
 }
 
+pkm_dup_helper() {
+  if [[ -f "$REPO_ROOT/Normalize-PkmDuplicatePaths.py" ]]; then
+    printf '%s\n' "$REPO_ROOT/Normalize-PkmDuplicatePaths.py"
+  elif [[ -f "$REPO_ROOT/upstream/Normalize-PkmDuplicatePaths.py" ]]; then
+    printf '%s\n' "$REPO_ROOT/upstream/Normalize-PkmDuplicatePaths.py"
+  fi
+}
+
+pkm_dup_py() {
+  local helper
+  helper="$(pkm_dup_helper)"
+  [[ -n "$helper" ]] || return 1
+  if command -v python3 >/dev/null 2>&1; then
+    python3 "$helper" "$@"
+  elif command -v python >/dev/null 2>&1; then
+    python "$helper" "$@"
+  else
+    return 1
+  fi
+}
+
+snapshot_pkm_positions() {
+  local db="$REPO_ROOT/data/pkm/pkm.db"
+  PKM_POSITION_SNAPSHOT=""
+  [[ -f "$db" ]] || return 0
+  PKM_POSITION_SNAPSHOT="$(mktemp "${TMPDIR:-/tmp}/homelab-pkm-positions.XXXXXX.json")"
+  if pkm_dup_py snapshot --db "$db" --out "$PKM_POSITION_SNAPSHOT" >/dev/null; then
+    echo "Saved local PKM page order."
+  else
+    rm -f -- "$PKM_POSITION_SNAPSHOT"
+    PKM_POSITION_SNAPSHOT=""
+  fi
+}
+
+restore_pkm_positions() {
+  local db="$REPO_ROOT/data/pkm/pkm.db" out
+  [[ -n "$PKM_POSITION_SNAPSHOT" && -f "$PKM_POSITION_SNAPSHOT" && -f "$db" ]] || return 0
+  out="$(pkm_dup_py restore --db "$db" --from-json "$PKM_POSITION_SNAPSHOT" || true)"
+  [[ "$out" == restored\ 0\ * || -z "$out" ]] && return 0
+  echo "Restored local PKM page order."
+}
+
+clear_pkm_sqlite_sidecars() {
+  rm -f -- "$REPO_ROOT/data/pkm/pkm.db-wal" "$REPO_ROOT/data/pkm/pkm.db-shm"
+}
+
+stop_pkm_if_present() {
+  local container="${HOMELAB_PKM_CONTAINER:-pkm-backend}"
+  command -v docker >/dev/null 2>&1 || return 0
+  docker inspect "$container" >/dev/null 2>&1 || return 0
+  echo "Stopping ${container} before replacing pkm.db."
+  docker stop "$container" >/dev/null 2>&1 || true
+}
+
+reindex_pkm() {
+  local helper="$REPO_ROOT/Reindex-PkmFromDisk.sh"
+  [[ -f "$helper" ]] || helper="$REPO_ROOT/upstream/Reindex-PkmFromDisk.sh"
+  [[ -f "$helper" ]] || return 0
+  chmod +x "$helper" 2>/dev/null || true
+  /bin/bash "$helper" || true
+}
+
 command -v git >/dev/null 2>&1 || die "git is required"
 [[ -d "$REPO_ROOT/.git" ]] || die "Site root has no .git. This script updates the site data repo, not the product submodule."
 [[ -d "$REPO_ROOT/data" ]] || die "Missing data/ under site root."
@@ -90,12 +151,17 @@ if [[ -d "$SCRIPTS_REL" ]]; then
 fi
 
 cleanup() {
+  [[ -n "$PKM_POSITION_SNAPSHOT" && -f "$PKM_POSITION_SNAPSHOT" ]] && rm -f -- "$PKM_POSITION_SNAPSHOT"
   [[ -n "$KEEP_DIR" && -d "$KEEP_DIR" ]] && rm -rf -- "$KEEP_DIR"
 }
 trap cleanup EXIT
 
+snapshot_pkm_positions
+stop_pkm_if_present
+
 git_auth fetch origin "$BRANCH"
 git_auth restore --source "origin/${BRANCH}" --worktree -- data
+clear_pkm_sqlite_sidecars
 echo "Restored data/ from origin/${BRANCH} (working tree only, site root ${REPO_ROOT})."
 
 if [[ "$HAD_SCRIPTS" -eq 1 ]]; then
@@ -105,4 +171,8 @@ if [[ "$HAD_SCRIPTS" -eq 1 ]]; then
   echo "Restored local data/pkm/scripts (not overwritten from origin)."
 fi
 
-echo "Done. Local scripts kept; other data/ matches origin. Nothing was committed or pushed."
+restore_pkm_positions
+reindex_pkm
+restore_pkm_positions
+
+echo "Done. Local scripts and page order kept; other data/ matches origin. Nothing was committed or pushed."
