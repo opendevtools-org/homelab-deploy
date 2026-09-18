@@ -128,6 +128,33 @@ git_auth() {
   git "${GIT_AUTH_ARGS[@]}" "$@"
 }
 
+STOPPED_FOR_SYNC=()
+
+stop_data_lock_containers() {
+  local name running
+  STOPPED_FOR_SYNC=()
+  command -v docker >/dev/null 2>&1 || return 0
+  for name in pkm-backend home-hub-platform; do
+    running="$(docker inspect -f '{{.State.Running}}' "$name" 2>/dev/null || true)"
+    [[ "$running" == "true" ]] || continue
+    echo "Stopping ${name} so Git can update SQLite files."
+    docker stop "$name" >/dev/null 2>&1 || true
+    STOPPED_FOR_SYNC+=("$name")
+  done
+  if (( ${#STOPPED_FOR_SYNC[@]} > 0 )); then
+    sleep 2
+  fi
+}
+
+start_data_lock_containers() {
+  local name
+  (( ${#STOPPED_FOR_SYNC[@]} > 0 )) || return 0
+  for name in "${STOPPED_FOR_SYNC[@]}"; do
+    docker start "$name" >/dev/null 2>&1 || true
+  done
+  STOPPED_FOR_SYNC=()
+}
+
 merge_sqlite_conflict() {
   local path="$1"
   local database_type temp_dir summary py
@@ -212,13 +239,17 @@ conflict_archive_path() {
 }
 
 resolve_conflicts_with_remote() {
+  local sync_error="${1:-}"
   local -a conflicted_paths
   local path archive archive_dir
   mapfile -d '' conflicted_paths < <(git diff --name-only -z --diff-filter=U)
 
   if (( ${#conflicted_paths[@]} == 0 )); then
     git_auth merge --abort 2>/dev/null || true
-    die "Automatic sync failed, but no conflicted files were detected. Check Git status manually."
+    if echo "$sync_error" | grep -qiE 'Access is denied|Permission denied|unable to unlink|unable to write|unable to create'; then
+      die "Git could not update working files (often SQLite held open by Docker). Original error: ${sync_error}"
+    fi
+    die "Automatic sync failed, but no conflicted files were detected. ${sync_error}"
   fi
 
   for path in "${conflicted_paths[@]}"; do
@@ -262,6 +293,9 @@ build_git_auth_args
 BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 [[ -n "$BRANCH" && "$BRANCH" != "HEAD" ]] || die "Detached HEAD is not supported for automatic backup pushes."
 
+stop_data_lock_containers
+trap start_data_lock_containers EXIT
+
 git add -u -- "${BACKUP_PATHS[@]}"
 mapfile -d '' NEW_BACKUP_FILES < <(git ls-files -z -o --exclude-standard -- "${BACKUP_PATHS[@]}")
 if (( ${#NEW_BACKUP_FILES[@]} > 0 )); then
@@ -275,14 +309,16 @@ else
   notify "INFO" "No changes in backup paths (data/, docker-compose.custom.yml, docker-compose.apps.yml, README.md). Continuing with remote sync."
 fi
 
-if ! git_auth pull --rebase --autostash origin "$BRANCH"; then
+if ! rebase_err="$(git_auth pull --rebase --autostash origin "$BRANCH" 2>&1)"; then
   git_auth rebase --abort 2>/dev/null || true
-  if ! git_auth merge --no-edit "origin/$BRANCH"; then
-    resolve_conflicts_with_remote
+  if ! merge_err="$(git_auth merge --no-edit "origin/$BRANCH" 2>&1)"; then
+    resolve_conflicts_with_remote "${rebase_err} | merge: ${merge_err}"
   fi
 fi
 
 git_auth push origin "$BRANCH"
+start_data_lock_containers
+trap - EXIT
 
 notify "INFO" "Backup/sync of data/, docker-compose.custom.yml, docker-compose.apps.yml, and README.md completed on branch '${BRANCH}'."
 restore_pkm_data_ownership

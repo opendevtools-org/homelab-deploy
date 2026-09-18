@@ -88,6 +88,39 @@ function Invoke-Git {
   return $output
 }
 
+$script:stoppedForSync = @()
+
+function Stop-DataLockContainers {
+  $script:stoppedForSync = @()
+  if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
+  foreach ($name in @("pkm-backend", "home-hub-platform")) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $running = & docker inspect -f "{{.State.Running}}" $name 2>$null
+    $ErrorActionPreference = $prev
+    if ("$running".Trim() -ne "true") { continue }
+    Write-Host ("Stopping {0} so Git can update SQLite files." -f $name)
+    $ErrorActionPreference = "Continue"
+    & docker stop $name 2>&1 | Out-Null
+    $ErrorActionPreference = $prev
+    $script:stoppedForSync += $name
+  }
+  if ($script:stoppedForSync.Count -gt 0) {
+    Start-Sleep -Seconds 2
+  }
+}
+
+function Start-DataLockContainers {
+  if (-not $script:stoppedForSync -or $script:stoppedForSync.Count -eq 0) { return }
+  foreach ($name in $script:stoppedForSync) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & docker start $name 2>&1 | Out-Null
+    $ErrorActionPreference = $prev
+  }
+  $script:stoppedForSync = @()
+}
+
 function Export-GitBlob {
   param(
     [string]$ObjectSpec,
@@ -217,6 +250,8 @@ function New-ConflictArchivePath {
 }
 
 function Resolve-GitConflictsWithRemote {
+  param([string]$SyncError)
+
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   $rawPaths = & git diff --name-only -z --diff-filter=U 2>&1
@@ -229,8 +264,15 @@ function Resolve-GitConflictsWithRemote {
 
   $conflictedPaths = (($rawPaths -join "") -split [char]0) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
   if (-not $conflictedPaths) {
+    $prevStatus = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $status = (& git status --short --untracked-files=no 2>&1 | Out-String).Trim()
+    $ErrorActionPreference = $prevStatus
     & git merge --abort 2>&1 | Out-Null
-    throw "Automatic sync failed, but no conflicted files were detected. Check Git status manually."
+    if ($SyncError -match "Access is denied|Permission denied|unable to unlink|unable to write|unable to create") {
+      throw ("Git could not update working files (often SQLite held open by Docker). Original error: {0}" -f $SyncError)
+    }
+    throw ("Automatic sync failed, but no conflicted files were detected. {0} Status: {1}" -f $SyncError, $status)
   }
 
   foreach ($path in $conflictedPaths) {
@@ -297,14 +339,6 @@ function Send-Notification {
     Write-Warning ("Cannot write notification log: {0}" -f $_.Exception.Message)
   }
 
-  if ($Level -eq "ERROR") {
-    try {
-      & eventcreate /T ERROR /ID 1000 /L APPLICATION /SO "HomelabDataGitBackup" /D $Message | Out-Null
-    } catch {
-      Write-Warning ("Cannot write Windows Event Log notification: {0}" -f $_.Exception.Message)
-    }
-  }
-
   if (-not [string]::IsNullOrWhiteSpace($NotifyWebhookUrl)) {
     try {
       $payload = @{ text = $line } | ConvertTo-Json -Compress
@@ -364,47 +398,50 @@ try {
   }
 
   $backupPathspecs = @($backupPaths + $excludePathspec)
-  $addArgs = @("add", "-A", "--") + $backupPathspecs
-  Invoke-Git @addArgs | Out-Null
-
-  $prev = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  $diffArgs = @("diff", "--cached", "--name-only", "--") + $backupPathspecs
-  $staged = & git @diffArgs 2>&1
-  $code = $LASTEXITCODE
-  $ErrorActionPreference = $prev
-  if ($code -ne 0) {
-    throw ("git diff --cached failed: {0}" -f (($staged | Out-String).Trim()))
-  }
-
-  if ($staged) {
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $message = "backup(site): $timestamp"
-    Invoke-Git commit -m $message | Out-Null
-  } else {
-    $msg = "No changes in backup paths (data/, docker-compose.custom.yml, docker-compose.apps.yml, README.md). Continuing with remote sync."
-    Write-Host $msg
-    Send-Notification -Level "INFO" -Message $msg
-  }
-
   try {
-    Invoke-Git pull --rebase --autostash origin $branch | Out-Null
-  } catch {
-    $rebaseError = $_.Exception.Message
+    Stop-DataLockContainers
+    $addArgs = @("add", "-A", "--") + $backupPathspecs
+    Invoke-Git @addArgs | Out-Null
 
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & git rebase --abort 2>&1 | Out-Null
+    $diffArgs = @("diff", "--cached", "--name-only", "--") + $backupPathspecs
+    $staged = & git @diffArgs 2>&1
+    $code = $LASTEXITCODE
     $ErrorActionPreference = $prev
+    if ($code -ne 0) {
+      throw ("git diff --cached failed: {0}" -f (($staged | Out-String).Trim()))
+    }
+
+    if ($staged) {
+      $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+      $message = "backup(site): $timestamp"
+      Invoke-Git commit -m $message | Out-Null
+    } else {
+      $msg = "No changes in backup paths (data/, docker-compose.custom.yml, docker-compose.apps.yml, README.md). Continuing with remote sync."
+      Write-Host $msg
+      Send-Notification -Level "INFO" -Message $msg
+    }
 
     try {
-      Invoke-Git merge --no-edit ("origin/{0}" -f $branch) | Out-Null
+      Invoke-Git pull --rebase --autostash origin $branch | Out-Null
     } catch {
-      Resolve-GitConflictsWithRemote
+      $rebaseError = $_.Exception.Message
+      $prev = $ErrorActionPreference
+      $ErrorActionPreference = "Continue"
+      & git rebase --abort 2>&1 | Out-Null
+      $ErrorActionPreference = $prev
+      try {
+        Invoke-Git merge --no-edit ("origin/{0}" -f $branch) | Out-Null
+      } catch {
+        Resolve-GitConflictsWithRemote -SyncError ("{0} | merge: {1}" -f $rebaseError, $_.Exception.Message)
+      }
     }
-  }
 
-  Invoke-Git push origin $branch | Out-Null
+    Invoke-Git push origin $branch | Out-Null
+  } finally {
+    Start-DataLockContainers
+  }
 
   $ok = "Backup/sync of data/, docker-compose.custom.yml, docker-compose.apps.yml, and README.md completed on branch '{0}'." -f $branch
   Write-Host $ok

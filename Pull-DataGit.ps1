@@ -7,7 +7,8 @@
   syncs with origin, archives local conflict copies when the same file changed
   on both servers, pushes the synchronized branch, then updates submodules.
   After a successful sync, restarts PKM and imports pages/files/PDFs/bookmarks
-  from disk (same as Import from disk in the UI).
+  from disk (same as Import from disk in the UI). Stops pkm-backend and
+  home-hub-platform before Git updates SQLite files, then starts them again.
 
 .EXAMPLE
   .\Pull-DataGit.ps1
@@ -88,6 +89,39 @@ function Invoke-Git {
     throw ("git {0} failed (exit {1}): {2}" -f ($GitArgs -join " "), $code, (($output | Out-String).Trim()))
   }
   return $output
+}
+
+$script:stoppedForSync = @()
+
+function Stop-DataLockContainers {
+  $script:stoppedForSync = @()
+  if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
+  foreach ($name in @("pkm-backend", "home-hub-platform")) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $running = & docker inspect -f "{{.State.Running}}" $name 2>$null
+    $ErrorActionPreference = $prev
+    if ("$running".Trim() -ne "true") { continue }
+    Write-Host ("Stopping {0} so Git can update SQLite files." -f $name)
+    $ErrorActionPreference = "Continue"
+    & docker stop $name 2>&1 | Out-Null
+    $ErrorActionPreference = $prev
+    $script:stoppedForSync += $name
+  }
+  if ($script:stoppedForSync.Count -gt 0) {
+    Start-Sleep -Seconds 2
+  }
+}
+
+function Start-DataLockContainers {
+  if (-not $script:stoppedForSync -or $script:stoppedForSync.Count -eq 0) { return }
+  foreach ($name in $script:stoppedForSync) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & docker start $name 2>&1 | Out-Null
+    $ErrorActionPreference = $prev
+  }
+  $script:stoppedForSync = @()
 }
 
 function Export-GitBlob {
@@ -219,6 +253,8 @@ function New-ConflictArchivePath {
 }
 
 function Resolve-GitConflictsWithRemote {
+  param([string]$SyncError)
+
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   $rawPaths = & git diff --name-only -z --diff-filter=U 2>&1
@@ -231,8 +267,15 @@ function Resolve-GitConflictsWithRemote {
 
   $conflictedPaths = (($rawPaths -join "") -split [char]0) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
   if (-not $conflictedPaths) {
+    $prevStatus = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $status = (& git status --short --untracked-files=no 2>&1 | Out-String).Trim()
+    $ErrorActionPreference = $prevStatus
     & git merge --abort 2>&1 | Out-Null
-    throw "Automatic sync failed, but no conflicted files were detected. Check Git status manually."
+    if ($SyncError -match "Access is denied|Permission denied|unable to unlink|unable to write|unable to create") {
+      throw ("Git could not update working files (often SQLite held open by Docker). Original error: {0}" -f $SyncError)
+    }
+    throw ("Automatic sync failed, but no conflicted files were detected. {0} Status: {1}" -f $SyncError, $status)
   }
 
   foreach ($path in $conflictedPaths) {
@@ -308,6 +351,7 @@ function Sync-WithOrigin {
   try {
     Invoke-Git pull --rebase --autostash origin $Branch | Out-Null
   } catch {
+    $rebaseError = $_.Exception.Message
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     & git rebase --abort 2>&1 | Out-Null
@@ -316,7 +360,7 @@ function Sync-WithOrigin {
     try {
       Invoke-Git merge --no-edit ("origin/{0}" -f $Branch) | Out-Null
     } catch {
-      Resolve-GitConflictsWithRemote
+      Resolve-GitConflictsWithRemote -SyncError ("{0} | merge: {1}" -f $rebaseError, $_.Exception.Message)
     }
   }
 }
@@ -339,14 +383,6 @@ function Send-Notification {
     Add-Content -Path $NotificationLog -Value $line
   } catch {
     Write-Warning ("Cannot write notification log: {0}" -f $_.Exception.Message)
-  }
-
-  if ($Level -eq "ERROR") {
-    try {
-      & eventcreate /T ERROR /ID 1000 /L APPLICATION /SO "HomelabDataGitPull" /D $Message | Out-Null
-    } catch {
-      Write-Warning ("Cannot write Windows Event Log notification: {0}" -f $_.Exception.Message)
-    }
   }
 
   if (-not [string]::IsNullOrWhiteSpace($NotifyWebhookUrl)) {
@@ -465,6 +501,7 @@ if (-not (Test-Path (Join-Path $repoRoot "data"))) {
 }
 
 Set-Location $repoRoot
+Write-Host "Pull-DataGit: stopping pkm-backend and home-hub-platform before git sync when they are running."
 Import-DotEnv -Path (Join-Path $repoRoot ".env")
 Initialize-GitAuth
 
@@ -475,12 +512,17 @@ try {
   }
 
   Save-PkmPositions
-  Commit-LocalChanges
-  Sync-WithOrigin -Branch $branch
-  Repair-PkmDuplicatePaths
-  Commit-LocalChanges
-  Invoke-Git push origin $branch | Out-Null
-  Invoke-Git submodule update --init --recursive | Out-Null
+  try {
+    Stop-DataLockContainers
+    Commit-LocalChanges
+    Sync-WithOrigin -Branch $branch
+    Repair-PkmDuplicatePaths
+    Commit-LocalChanges
+    Invoke-Git push origin $branch | Out-Null
+    Invoke-Git submodule update --init --recursive | Out-Null
+  } finally {
+    Start-DataLockContainers
+  }
 
   $ok = "Pull/sync completed with origin/{0}." -f $branch
   Write-Host $ok
