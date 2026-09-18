@@ -61,6 +61,26 @@ def _patch_plugin_compose_projects(mod) -> None:
     mod._hub_plugin_compose_projects = True
 
 
+def _patch_compose_up_adopt(mod) -> None:
+    if getattr(mod, "_hub_compose_up_adopt", False):
+        return
+    orig = getattr(mod, "compose_up", None)
+    if orig is None:
+        return
+
+    async def compose_up(install_dir, compose_file, override, project):
+        try:
+            return await orig(install_dir, compose_file, override, project)
+        except Exception as exc:
+            text = str(exc).lower()
+            if "already in use" in text or "conflict" in text:
+                return None
+            raise
+
+    mod.compose_up = compose_up
+    mod._hub_compose_up_adopt = True
+
+
 def _install() -> None:
     import builtins
 
@@ -79,6 +99,7 @@ def _install() -> None:
             agent = mod if name == "app.agent" else getattr(mod, "agent", None)
             if agent is not None:
                 _patch_plugin_compose_projects(agent)
+                _patch_compose_up_adopt(agent)
         return mod
 
     builtins.__import__ = _import
