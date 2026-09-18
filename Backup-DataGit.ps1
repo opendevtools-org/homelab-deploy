@@ -410,6 +410,10 @@ try {
   Write-Host $ok
   Send-Notification -Level "INFO" -Message $ok
   Invoke-PkmDiskReindex
+  $startPlugins = Join-Path $repoRoot "Start-MarketPlugins.ps1"
+  if (Test-Path $startPlugins) {
+    & $startPlugins
+  }
 } catch {
   $err = "Backup failed: {0}" -f $_.Exception.Message
   Write-Error $err

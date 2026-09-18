@@ -487,6 +487,10 @@ try {
   Send-Notification -Level "INFO" -Message $ok
   Invoke-PkmDiskReindex
   Restore-PkmPositions
+  $startPlugins = Join-Path $repoRoot "Start-MarketPlugins.ps1"
+  if (Test-Path $startPlugins) {
+    & $startPlugins
+  }
 } catch {
   $err = "Pull failed: {0}" -f $_.Exception.Message
   Send-Notification -Level "ERROR" -Message $err

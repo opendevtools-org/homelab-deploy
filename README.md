@@ -344,6 +344,32 @@ Unregister Linux cron: `./Register-DataGitBackup.sh --uninstall`.
 .\Collect-HomelabDiag.ps1
 ```
 
+### Daily pull (automatic merge)
+
+From the site root. Commits local `data/`, pulls origin, runs the same merge as `Pull-DataGit` (`Merge-SqliteGitConflict.py` for Hub/PKM databases; other conflicts keep remote and archive `*.local-conflict.*`), then pushes and reindexes PKM.
+
+```bash
+./Pull.sh
+./upstream/Pull.sh
+```
+
+```powershell
+.\Pull.ps1
+.\upstream\Pull.ps1
+```
+
+Product images + compose as well:
+
+```bash
+./Pull.sh --product --start
+```
+
+```powershell
+.\Pull.ps1 -Product -Start
+```
+
+`Pull.sh` / `Pull.ps1` only wrap `Pull-DataGit` and optional `Update-HomelabUpstream`. After `Update-HomelabUpstream`, the launchers are copied to the site root.
+
 ### Two servers — `Pull-DataGit`
 
 If both machines can receive edits, schedule Git on both:
@@ -352,6 +378,8 @@ If both machines can receive edits, schedule Git on both:
 - standby: `Pull-DataGit.sh` or `Pull-DataGit.ps1`
 
 The standby pull first commits local changes in `data/`, `docker-compose.custom.yml`, `docker-compose.apps.yml`, and `README.md`, then syncs with `origin` and pushes. Edits made on either server reach the other on the next run.
+
+If a Market plugin (for example Guacamole) was installed on one host and its files under `data/hub/plugins/<id>/` were pushed, `Pull-DataGit` / `Backup-DataGit` run `Start-MarketPlugins` on the other host: Compose `up` for each plugin folder, join `homelab_default`, restart Platform so the catalog matches. Hub startup does the same if the plugin row or folder is already there.
 
 After the Git sync, `Pull-DataGit` also collapses generic PKM duplicates created when two trees meet: a folder or page named `name-1` next to `name` (Finder/Explorer/Git copy suffix). The canonical name is kept; differing files are archived as `*.local-conflict.*`. Page order (`pages.position`) is snapshotted before the pull and reapplied to the canonical paths after reindex. Names like `ubuntu-22` are left alone (`-1` only).
 

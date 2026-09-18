@@ -196,7 +196,8 @@ if [[ "$already_site" -eq 0 ]]; then
     Update-HomelabUpstream.ps1 Update-HomelabUpstream.sh \
     Backup-DataGit.ps1 Backup-DataGit.sh \
     Register-DataGitBackupTask.ps1 Register-DataGitBackup.sh \
-    Pull-DataGit.ps1 Pull-DataGit.sh \
+    Pull-DataGit.ps1 Pull-DataGit.sh Pull.sh Pull.ps1 \
+    Start-MarketPlugins.sh Start-MarketPlugins.ps1 \
     Pull-PkmDataKeepScripts.ps1 Pull-PkmDataKeepScripts.sh \
     Collect-HomelabDiag.ps1 Collect-HomelabDiag.sh Dump-PkmSidebar.py \
     Register-DataGitPullTask.ps1 Register-DataGitPull.sh \
@@ -384,7 +385,8 @@ for s in \
   Update-HomelabUpstream.sh Update-HomelabUpstream.ps1 \
   Backup-DataGit.sh Backup-DataGit.ps1 \
   Register-DataGitBackup.sh Register-DataGitBackupTask.ps1 \
-  Pull-DataGit.sh Pull-DataGit.ps1 \
+  Pull-DataGit.sh Pull-DataGit.ps1 Pull.sh Pull.ps1 \
+  Start-MarketPlugins.sh Start-MarketPlugins.ps1 \
   Pull-PkmDataKeepScripts.sh Pull-PkmDataKeepScripts.ps1 \
   Collect-HomelabDiag.sh Collect-HomelabDiag.ps1 Dump-PkmSidebar.py \
   Register-DataGitPull.sh Register-DataGitPullTask.ps1 \

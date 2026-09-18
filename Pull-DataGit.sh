@@ -348,3 +348,7 @@ notify "INFO" "Pull/sync completed with origin/${BRANCH}."
 restore_pkm_data_ownership
 reindex_pkm_after_sync
 restore_pkm_positions
+if [[ -f "$SCRIPT_ROOT/Start-MarketPlugins.sh" ]]; then
+  chmod +x "$SCRIPT_ROOT/Start-MarketPlugins.sh" 2>/dev/null || true
+  /bin/bash "$SCRIPT_ROOT/Start-MarketPlugins.sh" || notify "WARN" "Market plugin start after pull did not fully succeed."
+fi

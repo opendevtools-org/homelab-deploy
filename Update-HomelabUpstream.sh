@@ -111,6 +111,12 @@ LAUNCHERS=(
   Register-DataGitBackupTask.ps1
   Pull-DataGit.sh
   Pull-DataGit.ps1
+  Pull.sh
+  Pull.ps1
+  Start-MarketPlugins.sh
+  Start-MarketPlugins.ps1
+  Pull.sh
+  Pull.ps1
   Pull-PkmDataKeepScripts.sh
   Pull-PkmDataKeepScripts.ps1
   Collect-HomelabDiag.sh
