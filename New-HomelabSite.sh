@@ -198,7 +198,7 @@ if [[ "$already_site" -eq 0 ]]; then
     Register-DataGitBackupTask.ps1 Register-DataGitBackup.sh \
     Pull-DataGit.ps1 Pull-DataGit.sh \
     Pull-PkmDataKeepScripts.ps1 Pull-PkmDataKeepScripts.sh \
-    Collect-HomelabDiag.ps1 Collect-HomelabDiag.sh \
+    Collect-HomelabDiag.ps1 Collect-HomelabDiag.sh Dump-PkmSidebar.py \
     Register-DataGitPullTask.ps1 Register-DataGitPull.sh \
     Reindex-PkmFromDisk.ps1 Reindex-PkmFromDisk.sh \
     docker-compose.config.yml \
@@ -386,7 +386,7 @@ for s in \
   Register-DataGitBackup.sh Register-DataGitBackupTask.ps1 \
   Pull-DataGit.sh Pull-DataGit.ps1 \
   Pull-PkmDataKeepScripts.sh Pull-PkmDataKeepScripts.ps1 \
-  Collect-HomelabDiag.sh Collect-HomelabDiag.ps1 \
+  Collect-HomelabDiag.sh Collect-HomelabDiag.ps1 Dump-PkmSidebar.py \
   Register-DataGitPull.sh Register-DataGitPullTask.ps1 \
   Reindex-PkmFromDisk.sh Reindex-PkmFromDisk.ps1 \
   Merge-SqliteGitConflict.py \

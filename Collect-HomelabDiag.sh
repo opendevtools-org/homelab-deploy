@@ -77,30 +77,64 @@ echo "guacamole plugin files:"
 ls -la data/hub/plugins/guacamole 2>/dev/null || echo MISSING
 
 section "sqlite_pkm_pages"
-python3 - <<'PY' 2>/dev/null || python - <<'PY' 2>/dev/null || echo "python unavailable"
-import os, sqlite3
-p = "data/pkm/pkm.db"
-if not os.path.isfile(p):
-    print("NO_PKM_DB")
-else:
-    c = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
-    cols = [r[1] for r in c.execute("PRAGMA table_info(pages)")]
-    print("cols", ",".join(cols))
-    title = "title" if "title" in cols else ("name" if "name" in cols else None)
-    path = "path" if "path" in cols else None
-    pos = "position" if "position" in cols else None
-    if title and pos:
-        sel = ", ".join(x for x in (title, path, pos) if x)
-        where = ""
-        if "parent_id" in cols:
-            where = " WHERE parent_id IS NULL OR parent_id = ''"
-        rows = c.execute(f"SELECT {sel} FROM pages{where} ORDER BY {pos}, {title} LIMIT 80").fetchall()
-        print("sidebar_roots", len(rows))
-        for r in rows:
-            print("|".join("" if x is None else str(x) for x in r))
-    else:
-        print("unexpected schema")
+DUMP_PY="$ROOT/Dump-PkmSidebar.py"
+[[ -f "$DUMP_PY" ]] || DUMP_PY="$ROOT/upstream/Dump-PkmSidebar.py"
+ORIGIN_DB=""
+section "pkm_order_remote_vs_local"
+BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+if [[ -n "$BRANCH" && "$BRANCH" != "HEAD" ]]; then
+  SRC="origin/${BRANCH}"
+  export SRC ROOT
+  git fetch origin "$BRANCH" >/dev/null 2>&1 || echo "git fetch failed"
+  if git cat-file -e "${SRC}:data/pkm/pkm.db" 2>/dev/null; then
+    ORIGIN_DB="$(mktemp "${TMPDIR:-/tmp}/pkm-origin.XXXXXX.db")"
+    git show "${SRC}:data/pkm/pkm.db" > "$ORIGIN_DB"
+    echo "origin pkm.db bytes=$(wc -c < "$ORIGIN_DB")"
+  else
+    echo "NO_ORIGIN_PKM_DB"
+  fi
+  echo "origin docs dirs:"
+  git ls-tree --name-only "${SRC}:data/pkm/docs" 2>/dev/null | sed 's|^|data/pkm/docs/|' || echo "(ls-tree failed)"
+  echo "docs_dir_compare:"
+  python3 - <<PY 2>/dev/null || python - <<PY 2>/dev/null || true
+import os, subprocess
+src = os.environ.get("SRC", "")
+root = os.environ.get("ROOT", ".")
+try:
+    origin = subprocess.check_output(["git", "ls-tree", "--name-only", src + ":data/pkm/docs"], text=True, cwd=root)
+except Exception:
+    origin = ""
+origin_set = {"data/pkm/docs/" + n.strip() for n in origin.splitlines() if n.strip()}
+docs = os.path.join(root, "data", "pkm", "docs")
+local_set = set()
+if os.path.isdir(docs):
+    local_set = {"data/pkm/docs/" + n for n in os.listdir(docs)}
+extra = sorted(local_set - origin_set)
+missing = sorted(origin_set - local_set)
+for d in extra:
+    print("local_not_on_origin", d)
+for d in missing:
+    print("origin_not_local", d)
+if origin_set and origin_set == local_set:
+    print("DOCS_DIRS_MATCH")
+elif not origin_set:
+    print("origin_docs_empty_or_failed")
 PY
+else
+  echo "NO_BRANCH"
+fi
+
+if [[ -f "$DUMP_PY" && -f data/pkm/pkm.db ]]; then
+  if command -v python3 >/dev/null 2>&1; then PY=python3; else PY=python; fi
+  if [[ -n "$ORIGIN_DB" && -f "$ORIGIN_DB" ]]; then
+    "$PY" "$DUMP_PY" data/pkm/pkm.db "$ORIGIN_DB"
+  else
+    "$PY" "$DUMP_PY" data/pkm/pkm.db
+  fi
+else
+  echo "Dump-PkmSidebar.py/python/pkm.db unavailable"
+fi
+[[ -n "$ORIGIN_DB" && -f "$ORIGIN_DB" ]] && rm -f -- "$ORIGIN_DB"
 
 section "sqlite_hub_plugins"
 python3 - <<'PY' 2>/dev/null || python - <<'PY' 2>/dev/null || echo "python unavailable"

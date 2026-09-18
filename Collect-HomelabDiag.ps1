@@ -27,7 +27,51 @@ if ((Split-Path -Leaf $here) -eq "upstream" -and (Test-HomelabSiteRoot (Split-Pa
 } else {
   throw "Run from site root or from upstream/."
 }
+$script:gitExtraArgs = @()
+
+function Import-DotEnv {
+  param([string]$Path)
+  if (-not (Test-Path $Path)) { return }
+  foreach ($line in Get-Content -Path $Path) {
+    if ([string]::IsNullOrWhiteSpace($line)) { continue }
+    if ($line.TrimStart().StartsWith("#")) { continue }
+    $pair = $line -split '=', 2
+    if ($pair.Count -ne 2) { continue }
+    $name = $pair[0].Trim()
+    $value = $pair[1].Trim()
+    if ([string]::IsNullOrWhiteSpace($name)) { continue }
+    if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+      [Environment]::SetEnvironmentVariable($name, $value)
+    }
+  }
+}
+
+function Initialize-GitAuth {
+  $pat = [Environment]::GetEnvironmentVariable("HOMELAB_GIT_PAT")
+  if ([string]::IsNullOrWhiteSpace($pat)) { return }
+  $originUrl = (& git remote get-url origin 2>$null | Select-Object -Last 1)
+  if ([string]::IsNullOrWhiteSpace($originUrl) -or -not $originUrl.ToString().Trim().StartsWith("https")) { return }
+  $username = [Environment]::GetEnvironmentVariable("HOMELAB_GIT_USERNAME")
+  if ([string]::IsNullOrWhiteSpace($username)) { $username = "git" }
+  $authBytes = [System.Text.Encoding]::ASCII.GetBytes(("{0}:{1}" -f $username, $pat))
+  $authB64 = [Convert]::ToBase64String($authBytes)
+  $script:gitExtraArgs = @(
+    "-c", "credential.helper=",
+    "-c", "core.askPass=",
+    "-c", ("http.extraHeader=AUTHORIZATION: basic {0}" -f $authB64)
+  )
+}
+
+function Invoke-GitSoft {
+  param([Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs)
+  $allArgs = @($script:gitExtraArgs + $GitArgs)
+  $output = & git @allArgs 2>&1
+  return @{ Code = $LASTEXITCODE; Text = $output }
+}
+
 Set-Location $root
+Import-DotEnv -Path (Join-Path $root ".env")
+Initialize-GitAuth
 
 $logDir = Join-Path $root "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
@@ -97,30 +141,71 @@ function Invoke-SqlitePreview {
 }
 
 Write-Section "sqlite_pkm_pages"
-Invoke-SqlitePreview @"
-import os, sqlite3
-p = r'$pkmDb'
-if not os.path.isfile(p):
-    print('NO_PKM_DB')
-else:
-    c = sqlite3.connect(p)
-    cols = [r[1] for r in c.execute('PRAGMA table_info(pages)')]
-    print('cols', ','.join(cols))
-    title = 'title' if 'title' in cols else ('name' if 'name' in cols else None)
-    path = 'path' if 'path' in cols else None
-    pos = 'position' if 'position' in cols else None
-    if title and pos:
-        sel = ', '.join(x for x in (title, path, pos) if x)
-        where = ""
-        if "parent_id" in cols:
-            where = " WHERE parent_id IS NULL OR parent_id = ''"
-        rows = c.execute(f"SELECT {sel} FROM pages{where} ORDER BY {pos}, {title} LIMIT 80").fetchall()
-        print("sidebar_roots", len(rows))
-        for r in rows:
-            print('|'.join('' if x is None else str(x) for x in r))
-    else:
-        print('unexpected schema')
-"@
+$dumpPy = Join-Path $root "Dump-PkmSidebar.py"
+if (-not (Test-Path $dumpPy)) { $dumpPy = Join-Path $root "upstream\Dump-PkmSidebar.py" }
+$originDb = $null
+Write-Section "pkm_order_remote_vs_local"
+$branch = (git -C $root rev-parse --abbrev-ref HEAD 2>$null | Select-Object -Last 1)
+if ($branch -and $branch -ne "HEAD") {
+  $fetch = Invoke-GitSoft fetch origin $branch
+  Write-Host ("git fetch origin {0} exit={1}" -f $branch, $fetch.Code)
+  $source = "origin/{0}" -f $branch
+  $blob = Invoke-GitSoft rev-parse ("{0}:data/pkm/pkm.db" -f $source)
+  if ($blob.Code -eq 0) {
+    $sha = ($blob.Text | Select-Object -Last 1).ToString().Trim()
+    $originDb = Join-Path ([System.IO.Path]::GetTempPath()) ("pkm-origin-{0}.db" -f $sha.Substring(0, [Math]::Min(12, $sha.Length)))
+    $errFile = "$originDb.err"
+    $gitArgs = @($script:gitExtraArgs) + @("cat-file", "blob", $sha)
+    $proc = Start-Process -FilePath "git" -ArgumentList $gitArgs -WorkingDirectory $root -RedirectStandardOutput $originDb -RedirectStandardError $errFile -NoNewWindow -Wait -PassThru
+    if ($proc.ExitCode -ne 0 -or -not (Test-Path $originDb) -or (Get-Item $originDb).Length -lt 100) {
+      Write-Host "ORIGIN_DB_EXTRACT_FAILED"
+      if (Test-Path $errFile) { Get-Content $errFile | Select-Object -First 5 }
+      $originDb = $null
+    } else {
+      Write-Host ("origin pkm.db blob={0} bytes={1}" -f $sha, (Get-Item $originDb).Length)
+    }
+    if (Test-Path $errFile) { Remove-Item $errFile -Force -ErrorAction SilentlyContinue }
+  } else {
+    Write-Host "NO_ORIGIN_PKM_DB (path data/pkm/pkm.db not on origin)"
+  }
+  Write-Host "origin docs dirs:"
+  $tree = Invoke-GitSoft ls-tree --name-only ("{0}:data/pkm/docs" -f $source)
+  if ($tree.Code -eq 0) {
+    $originDocs = @($tree.Text | ForEach-Object { $n = "$_".Trim(); if ($n) { "data/pkm/docs/$n" } })
+    $originDocs | ForEach-Object { Write-Host $_ }
+  } else {
+    $originDocs = @()
+    Write-Host "(ls-tree failed)"
+  }
+  $localDocs = @()
+  $docsPath = Join-Path $root "data\pkm\docs"
+  if (Test-Path $docsPath) {
+    $localDocs = @(Get-ChildItem $docsPath -Force | ForEach-Object { ("data/pkm/docs/" + $_.Name).Replace('\','/') })
+  }
+  Write-Host "docs_dir_compare:"
+  $oSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$originDocs)
+  $lSet = [System.Collections.Generic.HashSet[string]]::new([string[]]$localDocs)
+  foreach ($d in $localDocs) { if (-not $oSet.Contains($d)) { Write-Host ("local_not_on_origin {0}" -f $d) } }
+  foreach ($d in $originDocs) { if (-not $lSet.Contains($d)) { Write-Host ("origin_not_local {0}" -f $d) } }
+  if ($oSet.SetEquals($lSet)) { Write-Host "DOCS_DIRS_MATCH" }
+} else {
+  Write-Host "NO_BRANCH"
+}
+
+$py = Get-Command python -ErrorAction SilentlyContinue
+if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
+if ($py -and (Test-Path $dumpPy) -and (Test-Path $pkmDb)) {
+  if ($originDb) {
+    & $py.Source $dumpPy $pkmDb $originDb
+  } else {
+    & $py.Source $dumpPy $pkmDb
+  }
+} else {
+  Write-Host "Dump-PkmSidebar.py/python/pkm.db unavailable"
+}
+if ($originDb -and (Test-Path $originDb)) {
+  Remove-Item $originDb -Force -ErrorAction SilentlyContinue
+}
 
 Write-Section "sqlite_hub_plugins"
 Invoke-SqlitePreview @"

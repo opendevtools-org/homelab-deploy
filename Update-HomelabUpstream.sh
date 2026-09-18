@@ -64,7 +64,7 @@ git reset --hard origin/main
 REV="$(git rev-parse --short HEAD)"
 echo "Upstream  : $REV"
 
-for n in Collect-HomelabDiag.sh Collect-HomelabDiag.ps1; do
+for n in Collect-HomelabDiag.sh Collect-HomelabDiag.ps1 Dump-PkmSidebar.py; do
   if [[ -f "$UPSTREAM/$n" ]]; then
     cp -a "$UPSTREAM/$n" "$SITE_ROOT/$n"
     [[ "$n" == *.sh ]] && chmod +x "$SITE_ROOT/$n"
@@ -115,6 +115,7 @@ LAUNCHERS=(
   Pull-PkmDataKeepScripts.ps1
   Collect-HomelabDiag.sh
   Collect-HomelabDiag.ps1
+  Dump-PkmSidebar.py
   Register-DataGitPull.sh
   Register-DataGitPullTask.ps1
   Reindex-PkmFromDisk.sh

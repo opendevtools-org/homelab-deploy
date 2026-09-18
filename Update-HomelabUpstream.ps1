@@ -206,7 +206,7 @@ Invoke-Git reset --hard origin/main | Out-Null
 $rev = (Invoke-Git rev-parse --short HEAD | Select-Object -Last 1).ToString().Trim()
 Write-Host ("Upstream  : {0}" -f $rev)
 
-foreach ($n in @("Collect-HomelabDiag.ps1", "Collect-HomelabDiag.sh")) {
+foreach ($n in @("Collect-HomelabDiag.ps1", "Collect-HomelabDiag.sh", "Dump-PkmSidebar.py")) {
   $src = Join-Path $upstream $n
   if (Test-Path -LiteralPath $src) {
     Copy-Item -LiteralPath $src -Destination (Join-Path $siteRoot $n) -Force
@@ -262,6 +262,7 @@ $launcherNames = @(
   "Pull-PkmDataKeepScripts.sh",
   "Collect-HomelabDiag.ps1",
   "Collect-HomelabDiag.sh",
+  "Dump-PkmSidebar.py",
   "Register-DataGitPullTask.ps1",
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",
