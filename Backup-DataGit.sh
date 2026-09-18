@@ -18,7 +18,28 @@ export_env_file() {
 NOTIFY_WEBHOOK_URL="${HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL:-}"
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTIFICATION_LOG="${HOMELAB_BACKUP_LOG:-$SCRIPT_ROOT/logs/backup-data-git.log}"
-BACKUP_PATHS=(data docker-compose.custom.yml docker-compose.apps.yml README.md overrides)
+BACKUP_PATHS=(
+  data docker-compose.custom.yml docker-compose.apps.yml README.md overrides
+  upstream
+  .gitignore .gitignore.custom .gitignore.upstream
+  scriptkit agent-context docker
+  docker-compose.custom.example.yml docker-compose.apps.example.yml
+  Update-HomelabUpstream.ps1 Update-HomelabUpstream.sh
+  Backup-DataGit.ps1 Backup-DataGit.sh
+  Register-DataGitBackupTask.ps1 Register-DataGitBackup.sh
+  Pull-DataGit.ps1 Pull-DataGit.sh
+  Pull.ps1 Pull.sh
+  Start-MarketPlugins.ps1 Start-MarketPlugins.sh
+  Pull-PkmDataKeepScripts.ps1 Pull-PkmDataKeepScripts.sh
+  Collect-HomelabDiag.ps1 Collect-HomelabDiag.sh
+  Dump-PkmSidebar.py
+  Register-DataGitPullTask.ps1 Register-DataGitPull.sh
+  Reindex-PkmFromDisk.ps1 Reindex-PkmFromDisk.sh
+  Merge-SqliteGitConflict.py Normalize-PkmDuplicatePaths.py
+  Refresh-SiteProductTrees.ps1 Refresh-SiteProductTrees.sh
+  docker-compose.config.yml docker-compose.https.yml
+  Caddyfile README.site.md
+)
 SQLITE_MERGE_HELPER="$SCRIPT_ROOT/Merge-SqliteGitConflict.py"
 GIT_AUTH_ARGS=()
 HOST_ID="$(hostname 2>/dev/null || printf 'unknown-host')"
@@ -296,13 +317,18 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 stop_data_lock_containers
 trap start_data_lock_containers EXIT
 
-git add -u -- "${BACKUP_PATHS[@]}"
-mapfile -d '' NEW_BACKUP_FILES < <(git ls-files -z -o --exclude-standard -- "${BACKUP_PATHS[@]}")
+EXISTING_BACKUP_PATHS=()
+for p in "${BACKUP_PATHS[@]}"; do
+  [[ -e "$p" ]] && EXISTING_BACKUP_PATHS+=("$p")
+done
+
+git add -u -- "${EXISTING_BACKUP_PATHS[@]}"
+mapfile -d '' NEW_BACKUP_FILES < <(git ls-files -z -o --exclude-standard -- "${EXISTING_BACKUP_PATHS[@]}")
 if (( ${#NEW_BACKUP_FILES[@]} > 0 )); then
   git add -- "${NEW_BACKUP_FILES[@]}"
 fi
 
-if [[ -n "$(git diff --cached --name-only -- "${BACKUP_PATHS[@]}")" ]]; then
+if [[ -n "$(git diff --cached --name-only -- "${EXISTING_BACKUP_PATHS[@]}")" ]]; then
   TIMESTAMP="$(date '+%Y-%m-%d %H:%M:%S')"
   git commit -m "backup(site): ${TIMESTAMP}"
 else

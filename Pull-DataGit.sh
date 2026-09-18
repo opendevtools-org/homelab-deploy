@@ -9,7 +9,28 @@ set -euo pipefail
 NOTIFY_WEBHOOK_URL="${HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL:-}"
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTIFICATION_LOG="${HOMELAB_PULL_LOG:-$SCRIPT_ROOT/logs/pull-data-git.log}"
-BACKUP_PATHS=(data docker-compose.custom.yml docker-compose.apps.yml README.md overrides)
+BACKUP_PATHS=(
+  data docker-compose.custom.yml docker-compose.apps.yml README.md overrides
+  upstream
+  .gitignore .gitignore.custom .gitignore.upstream
+  scriptkit agent-context docker
+  docker-compose.custom.example.yml docker-compose.apps.example.yml
+  Update-HomelabUpstream.ps1 Update-HomelabUpstream.sh
+  Backup-DataGit.ps1 Backup-DataGit.sh
+  Register-DataGitBackupTask.ps1 Register-DataGitBackup.sh
+  Pull-DataGit.ps1 Pull-DataGit.sh
+  Pull.ps1 Pull.sh
+  Start-MarketPlugins.ps1 Start-MarketPlugins.sh
+  Pull-PkmDataKeepScripts.ps1 Pull-PkmDataKeepScripts.sh
+  Collect-HomelabDiag.ps1 Collect-HomelabDiag.sh
+  Dump-PkmSidebar.py
+  Register-DataGitPullTask.ps1 Register-DataGitPull.sh
+  Reindex-PkmFromDisk.ps1 Reindex-PkmFromDisk.sh
+  Merge-SqliteGitConflict.py Normalize-PkmDuplicatePaths.py
+  Refresh-SiteProductTrees.ps1 Refresh-SiteProductTrees.sh
+  docker-compose.config.yml docker-compose.https.yml
+  Caddyfile README.site.md
+)
 SQLITE_MERGE_HELPER="$SCRIPT_ROOT/Merge-SqliteGitConflict.py"
 PKM_DUP_HELPER="$SCRIPT_ROOT/Normalize-PkmDuplicatePaths.py"
 EXCLUDE_PATHSPEC=':(exclude)data/pkm/scripts/**/.uploads/**'
@@ -335,9 +356,14 @@ resolve_conflicts_with_remote() {
 }
 
 commit_local_changes() {
-  git add -A -- "${BACKUP_PATHS[@]}" "$EXCLUDE_PATHSPEC"
+  local -a existing=()
+  local p
+  for p in "${BACKUP_PATHS[@]}"; do
+    [[ -e "$p" ]] && existing+=("$p")
+  done
+  git add -A -- "${existing[@]}" "$EXCLUDE_PATHSPEC"
 
-  if [[ -z "$(git diff --cached --name-only -- "${BACKUP_PATHS[@]}" "$EXCLUDE_PATHSPEC")" ]]; then
+  if [[ -z "$(git diff --cached --name-only -- "${existing[@]}" "$EXCLUDE_PATHSPEC")" ]]; then
     return 0
   fi
 

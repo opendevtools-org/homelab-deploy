@@ -21,7 +21,30 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$backupPaths = @("data", "docker-compose.custom.yml", "docker-compose.apps.yml", "README.md", "overrides")
+$productSyncPaths = @(
+  "upstream",
+  ".gitignore", ".gitignore.custom", ".gitignore.upstream",
+  "scriptkit", "agent-context", "docker",
+  "docker-compose.custom.example.yml", "docker-compose.apps.example.yml",
+  "Update-HomelabUpstream.ps1", "Update-HomelabUpstream.sh",
+  "Backup-DataGit.ps1", "Backup-DataGit.sh",
+  "Register-DataGitBackupTask.ps1", "Register-DataGitBackup.sh",
+  "Pull-DataGit.ps1", "Pull-DataGit.sh",
+  "Pull.ps1", "Pull.sh",
+  "Start-MarketPlugins.ps1", "Start-MarketPlugins.sh",
+  "Pull-PkmDataKeepScripts.ps1", "Pull-PkmDataKeepScripts.sh",
+  "Collect-HomelabDiag.ps1", "Collect-HomelabDiag.sh",
+  "Dump-PkmSidebar.py",
+  "Register-DataGitPullTask.ps1", "Register-DataGitPull.sh",
+  "Reindex-PkmFromDisk.ps1", "Reindex-PkmFromDisk.sh",
+  "Merge-SqliteGitConflict.py", "Normalize-PkmDuplicatePaths.py",
+  "Refresh-SiteProductTrees.ps1", "Refresh-SiteProductTrees.sh",
+  "docker-compose.config.yml", "docker-compose.https.yml",
+  "Caddyfile", "README.site.md"
+)
+$backupPaths = @(
+  "data", "docker-compose.custom.yml", "docker-compose.apps.yml", "README.md", "overrides"
+) + $productSyncPaths
 $excludePathspec = ":(exclude)data/pkm/scripts/**/.uploads/**"
 $sqliteMergeHelper = Join-Path $PSScriptRoot "Merge-SqliteGitConflict.py"
 $pkmDupHelper = Join-Path $PSScriptRoot "Normalize-PkmDuplicatePaths.py"
@@ -322,8 +345,18 @@ function Resolve-GitConflictsWithRemote {
   Invoke-Git commit --no-edit | Out-Null
 }
 
+function Get-ExistingBackupPaths {
+  $found = @()
+  foreach ($p in $backupPaths) {
+    if (Test-Path -LiteralPath (Join-Path $repoRoot $p)) {
+      $found += $p
+    }
+  }
+  return $found
+}
+
 function Commit-LocalChanges {
-  $backupPathspecs = @($backupPaths + $excludePathspec)
+  $backupPathspecs = @(Get-ExistingBackupPaths) + @($excludePathspec)
   $addArgs = @("add", "-A", "--") + $backupPathspecs
   Invoke-Git @addArgs | Out-Null
 

@@ -20,7 +20,30 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
-$backupPaths = @("data", "docker-compose.custom.yml", "docker-compose.apps.yml", "README.md", "overrides")
+$productSyncPaths = @(
+  "upstream",
+  ".gitignore", ".gitignore.custom", ".gitignore.upstream",
+  "scriptkit", "agent-context", "docker",
+  "docker-compose.custom.example.yml", "docker-compose.apps.example.yml",
+  "Update-HomelabUpstream.ps1", "Update-HomelabUpstream.sh",
+  "Backup-DataGit.ps1", "Backup-DataGit.sh",
+  "Register-DataGitBackupTask.ps1", "Register-DataGitBackup.sh",
+  "Pull-DataGit.ps1", "Pull-DataGit.sh",
+  "Pull.ps1", "Pull.sh",
+  "Start-MarketPlugins.ps1", "Start-MarketPlugins.sh",
+  "Pull-PkmDataKeepScripts.ps1", "Pull-PkmDataKeepScripts.sh",
+  "Collect-HomelabDiag.ps1", "Collect-HomelabDiag.sh",
+  "Dump-PkmSidebar.py",
+  "Register-DataGitPullTask.ps1", "Register-DataGitPull.sh",
+  "Reindex-PkmFromDisk.ps1", "Reindex-PkmFromDisk.sh",
+  "Merge-SqliteGitConflict.py", "Normalize-PkmDuplicatePaths.py",
+  "Refresh-SiteProductTrees.ps1", "Refresh-SiteProductTrees.sh",
+  "docker-compose.config.yml", "docker-compose.https.yml",
+  "Caddyfile", "README.site.md"
+)
+$backupPaths = @(
+  "data", "docker-compose.custom.yml", "docker-compose.apps.yml", "README.md", "overrides"
+) + $productSyncPaths
 $excludePathspec = ":(exclude)data/pkm/scripts/generateReadme/.uploads/**"
 $sqliteMergeHelper = Join-Path $PSScriptRoot "Merge-SqliteGitConflict.py"
 $script:gitExtraArgs = @()
@@ -397,7 +420,11 @@ try {
     throw "Detached HEAD is not supported for automatic backup pushes."
   }
 
-  $backupPathspecs = @($backupPaths + $excludePathspec)
+  $existing = @()
+  foreach ($p in $backupPaths) {
+    if (Test-Path -LiteralPath (Join-Path $repoRoot $p)) { $existing += $p }
+  }
+  $backupPathspecs = @($existing + $excludePathspec)
   try {
     Stop-DataLockContainers
     $addArgs = @("add", "-A", "--") + $backupPathspecs
