@@ -303,6 +303,19 @@ function Resolve-GitConflictsWithRemote {
       continue
     }
 
+    if (Test-Path -LiteralPath $path -PathType Container) {
+      Send-Notification -Level "INFO" -Message ("Conflict in {0}: directory/submodule; remote version kept as canonical." -f $path)
+      $prev = $ErrorActionPreference
+      $ErrorActionPreference = "Continue"
+      & git checkout --theirs -- $path 2>&1 | Out-Null
+      $theirsDir = $LASTEXITCODE
+      $ErrorActionPreference = $prev
+      if ($theirsDir -eq 0) {
+        Invoke-Git add -- $path | Out-Null
+      }
+      continue
+    }
+
     $archive = New-ConflictArchivePath -Path $path
     $archiveDir = Split-Path -Parent $archive
 
@@ -317,7 +330,7 @@ function Resolve-GitConflictsWithRemote {
         New-Item -ItemType Directory -Path $archiveDir -Force | Out-Null
       }
       Copy-Item -LiteralPath $path -Destination $archive -Force
-      Invoke-Git add -- $archive | Out-Null
+      Invoke-Git add -f -- $archive | Out-Null
       Send-Notification -Level "INFO" -Message ("Conflict in {0}: local version saved as {1}; remote version kept as canonical." -f $path, $archive)
     } else {
       Send-Notification -Level "INFO" -Message ("Conflict in {0}: no local file version could be archived; remote version kept as canonical." -f $path)

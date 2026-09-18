@@ -88,7 +88,17 @@ def choose_row(base, local, remote, timestamp_index, preserve_rows=False):
     return remote
 
 
+def table_exists(connection, table):
+    row = connection.execute(
+        "SELECT 1 FROM sqlite_master WHERE type IN ('table', 'view') AND name = ?",
+        (table,),
+    ).fetchone()
+    return bool(row)
+
+
 def merge_table(output, base, local, remote, table, timestamp_column):
+    if not all(table_exists(db, table) for db in (base, local, remote)):
+        return 0
     definitions = [table_definition(db, table) for db in (base, local, remote)]
     if definitions[0] != definitions[1] or definitions[0] != definitions[2]:
         raise RuntimeError(f"table schema differs between database versions: {table}")

@@ -278,6 +278,14 @@ resolve_conflicts_with_remote() {
       continue
     fi
 
+    if [[ -d "$path" ]]; then
+      notify "INFO" "Conflict in ${path}: directory/submodule; remote version kept as canonical."
+      if git checkout --theirs -- "$path" 2>/dev/null; then
+        git add -- "$path"
+      fi
+      continue
+    fi
+
     archive="$(conflict_archive_path "$path")"
     archive_dir="$(dirname "$archive")"
 
