@@ -636,6 +636,12 @@ $refreshHelper = Join-Path $TargetDir "upstream\Refresh-SiteProductTrees.ps1"
 if (Test-Path -LiteralPath $refreshHelper) {
   & $refreshHelper -Upstream (Join-Path $TargetDir "upstream") -SiteRoot $TargetDir
 }
+$productOverride = Join-Path $TargetDir "upstream\overrides\hub-platform\sitecustomize.py"
+$siteOverride = Join-Path $TargetDir "overrides\hub-platform\sitecustomize.py"
+if (Test-Path -LiteralPath $productOverride) {
+  New-Item -ItemType Directory -Force -Path (Split-Path $siteOverride) | Out-Null
+  Copy-Item $productOverride $siteOverride -Force
+}
 $bakCli = Join-Path $bak "cli"
 if (Test-Path -LiteralPath $bakCli) {
   New-Item -ItemType Directory -Path (Join-Path $TargetDir "cli") -Force | Out-Null

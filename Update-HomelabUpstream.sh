@@ -85,7 +85,8 @@ if [[ -z "${HOMELAB_UPSTREAM_REEXEC:-}" ]]; then
 fi
 
 # Refresh site-root launchers from product package.
-# Also refreshes scriptkit/, agent-context/ (not site/), docker/*.example.
+# Also refreshes scriptkit/, agent-context/ (not site/), docker/*.example,
+# and overrides/hub-platform/sitecustomize.py.
 # Never overwrites docker-compose.custom.yml, docker-compose.apps.yml,
 # README.md, docker/**/Dockerfile, or cli/.
 LAUNCHERS=(
@@ -125,6 +126,13 @@ for s in "${LAUNCHERS[@]}"; do
 done
 if [[ ${#REFRESHED[@]} -gt 0 ]]; then
   echo "Refreshed site-root: ${REFRESHED[*]}"
+fi
+
+OVERRIDE_REL="overrides/hub-platform/sitecustomize.py"
+if [[ -f "$UPSTREAM/$OVERRIDE_REL" ]]; then
+  mkdir -p "$SITE_ROOT/overrides/hub-platform"
+  cp -a "$UPSTREAM/$OVERRIDE_REL" "$SITE_ROOT/$OVERRIDE_REL"
+  echo "Refreshed $OVERRIDE_REL"
 fi
 
 GITIGNORE_PLACEHOLDER='# Site-specific ignore rules go here. Product rules are in .gitignore.upstream.'

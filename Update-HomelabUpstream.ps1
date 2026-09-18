@@ -11,7 +11,8 @@
     Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
     docker-compose.config.yml, docker-compose.https.yml, Caddyfile,
     README.site.md, the layered gitignore files, scriptkit/,
-    agent-context/ (not site/), and docker/*.example.
+    agent-context/ (not site/), docker/*.example, and
+    overrides/hub-platform/sitecustomize.py.
     Does not overwrite docker-compose.custom.yml, docker-compose.apps.yml,
     README.md, docker/**/Dockerfile, or cli/.
 
@@ -272,6 +273,18 @@ foreach ($name in $launcherNames) {
 }
 if ($refreshed.Count -gt 0) {
   Write-Host ("Refreshed site-root {0}" -f ($refreshed -join ", "))
+}
+
+$productOverride = "overrides\hub-platform\sitecustomize.py"
+$overrideSrc = Join-Path $upstream $productOverride
+$overrideDst = Join-Path $siteRoot $productOverride
+if (Test-Path -LiteralPath $overrideSrc) {
+  $overrideDir = Split-Path -Parent $overrideDst
+  if (-not (Test-Path -LiteralPath $overrideDir)) {
+    New-Item -ItemType Directory -Path $overrideDir -Force | Out-Null
+  }
+  Copy-Item -LiteralPath $overrideSrc -Destination $overrideDst -Force
+  Write-Host ("Refreshed {0}" -f $productOverride)
 }
 
 $refreshHelper = Join-Path $upstream "Refresh-SiteProductTrees.ps1"

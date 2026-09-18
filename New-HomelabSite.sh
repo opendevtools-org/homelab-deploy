@@ -408,6 +408,11 @@ done
 if [[ -f "$TARGET_DIR/upstream/Refresh-SiteProductTrees.sh" ]]; then
   /bin/bash "$TARGET_DIR/upstream/Refresh-SiteProductTrees.sh" "$TARGET_DIR/upstream" "$TARGET_DIR"
 fi
+if [[ -f "$TARGET_DIR/upstream/overrides/hub-platform/sitecustomize.py" ]]; then
+  mkdir -p "$TARGET_DIR/overrides/hub-platform"
+  cp -a "$TARGET_DIR/upstream/overrides/hub-platform/sitecustomize.py" \
+    "$TARGET_DIR/overrides/hub-platform/sitecustomize.py"
+fi
 if [[ -d "$BAK/cli" ]]; then
   mkdir -p "$TARGET_DIR/cli"
   cp -a "$BAK/cli/." "$TARGET_DIR/cli/"
