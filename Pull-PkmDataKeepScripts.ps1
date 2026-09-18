@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
   Copies site data from origin into the local working tree, keeping local PKM scripts.
-  Page folder order comes from origin (pkm.db pages.position).
+  Page folder order comes from origin (pkm.db pages.position). Does not touch data/hub.
 
 .DESCRIPTION
   Run from the site instance root (folder with data/, .git), or from upstream/.
@@ -149,6 +149,35 @@ function Get-PkmContainer {
   return $container
 }
 
+function Remove-PkmFilesNotOnOrigin {
+  param([string]$Source)
+  $raw = Invoke-Git ls-tree -r --name-only $Source -- "data/pkm"
+  $want = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+  foreach ($line in @($raw)) {
+    $p = [string]$line
+    if (-not [string]::IsNullOrWhiteSpace($p)) { [void]$want.Add($p.Trim().Replace('\', '/')) }
+  }
+  $pkmRoot = Join-Path $repoRoot "data\pkm"
+  if (-not (Test-Path $pkmRoot)) { return }
+  $files = Get-ChildItem -LiteralPath $pkmRoot -Recurse -Force -File -ErrorAction SilentlyContinue
+  foreach ($f in $files) {
+    $rel = $f.FullName.Substring($repoRoot.Length).TrimStart('\', '/').Replace('\', '/')
+    if ($rel -like "data/pkm/scripts" -or $rel -like "data/pkm/scripts/*") { continue }
+    if (-not $want.Contains($rel)) {
+      Remove-Item -LiteralPath $f.FullName -Force
+    }
+  }
+  $dirs = Get-ChildItem -LiteralPath $pkmRoot -Recurse -Force -Directory -ErrorAction SilentlyContinue |
+    Sort-Object { $_.FullName.Length } -Descending
+  foreach ($d in $dirs) {
+    $rel = $d.FullName.Substring($repoRoot.Length).TrimStart('\', '/').Replace('\', '/')
+    if ($rel -like "data/pkm/scripts" -or $rel -like "data/pkm/scripts/*") { continue }
+    if (-not (Get-ChildItem -LiteralPath $d.FullName -Force -ErrorAction SilentlyContinue)) {
+      Remove-Item -LiteralPath $d.FullName -Force
+    }
+  }
+}
+
 function Stop-PkmIfPresent {
   $container = Get-PkmContainer
   if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
@@ -219,9 +248,11 @@ Stop-PkmIfPresent
 try {
   Invoke-Git fetch origin $branch | Out-Null
   $source = "origin/{0}" -f $branch
-  Invoke-Git restore --source $source --worktree -- "data" | Out-Null
+  Invoke-Git checkout $source -- "data/pkm"
+  Invoke-Git restore --staged -- "data/pkm" | Out-Null
+  Remove-PkmFilesNotOnOrigin -Source $source
   Clear-PkmSqliteSidecars
-  Write-Host ("Restored data/ from {0} (working tree only, site root {1})." -f $source, $repoRoot)
+  Write-Host ("Restored data/pkm from {0} (Hub data/ left untouched)." -f $source)
 
   if ($hadScripts) {
     $restored = Join-Path $repoRoot $scriptsRel
@@ -250,4 +281,4 @@ finally {
   }
 }
 
-Write-Host "Done. Local scripts kept; page order and other data/ match origin. Nothing was committed or pushed."
+Write-Host "Done. Local scripts kept; PKM tree/order match origin. Hub/Guacamole were not overwritten."

@@ -74,4 +74,13 @@ docker rm -f home-hub home-hub-platform pkm-backend pkm-frontend
 # Windows: .\Pull-PkmDataKeepScripts.ps1
 ```
 
-Restores `data/` from `origin/<branch>` on the site root; does not overwrite `data/pkm/scripts`. No commit or push.
+Restores `data/pkm` from `origin/<branch>` on the site root (drops extra local PKM files not on origin); does not overwrite `data/pkm/scripts` or `data/hub`. No commit or push.
+
+## Troubleshooting dump (no secrets)
+
+```bash
+./Collect-HomelabDiag.sh
+# Windows: .\Collect-HomelabDiag.ps1
+```
+
+Paste the output. It lists mounts, plugin ids, PKM folder order, and compose mentions of Guacamole. It does not print document bodies or passwords.

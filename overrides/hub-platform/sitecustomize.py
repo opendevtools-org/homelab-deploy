@@ -42,6 +42,25 @@ def _patch_safe_launch(mod) -> None:
     mod._hub_same_host_rewrite = True
 
 
+def _patch_plugin_compose_projects(mod) -> None:
+    if getattr(mod, "_hub_plugin_compose_projects", False):
+        return
+    if not hasattr(mod, "backend_compose_project"):
+        return
+
+    def backend_compose_project(plugin_id: str) -> str:
+        pid = (plugin_id or "plugin").strip() or "plugin"
+        return f"homelab-plugin-{pid}"
+
+    def frontend_compose_project(plugin_id: str) -> str:
+        pid = (plugin_id or "plugin").strip() or "plugin"
+        return f"homelab-plugin-{pid}-web"
+
+    mod.backend_compose_project = backend_compose_project
+    mod.frontend_compose_project = frontend_compose_project
+    mod._hub_plugin_compose_projects = True
+
+
 def _install() -> None:
     import builtins
 
@@ -56,6 +75,10 @@ def _install() -> None:
             target = getattr(mod, "main", None)
         if target is not None and hasattr(target, "_safe_launch_next"):
             _patch_safe_launch(target)
+        if name == "app.agent" or (name == "app" and fromlist and "agent" in fromlist):
+            agent = mod if name == "app.agent" else getattr(mod, "agent", None)
+            if agent is not None:
+                _patch_plugin_compose_projects(agent)
         return mod
 
     builtins.__import__ = _import

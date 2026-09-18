@@ -66,7 +66,7 @@ docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.remote.
 
 Login: `HUB_ADMIN_*` from `.env`. Create users under Utenti. Data in `./data/hub` and `./data/pkm` (gitignored) on the **server**.
 
-On first Platform start, Hub installs **Guacamole** from the community catalog (`HUB_DEFAULT_MARKET_PLUGINS=guacamole`) unless you already uninstalled it. Open it from the Hub catalog (`/p/guacamole/`). Set `HUB_DEFAULT_MARKET_PLUGINS=none` to skip.
+On first Platform start, Hub installs **Guacamole** from the community catalog (`HUB_DEFAULT_MARKET_PLUGINS=guacamole`) unless you already uninstalled it. Compose files live only under `data/hub/plugins/guacamole/` (not in the Hub/PKM site compose). Open it from the Hub catalog (`/p/guacamole/`). Set `HUB_DEFAULT_MARKET_PLUGINS=none` to skip.
 
 ## LAN HTTPS (clipboard / paste)
 
@@ -213,6 +213,8 @@ Layout after convert:
 ./Pull-DataGit.ps1
 ./Pull-PkmDataKeepScripts.sh
 ./Pull-PkmDataKeepScripts.ps1
+./Collect-HomelabDiag.sh
+./Collect-HomelabDiag.ps1
 ./Register-DataGitBackup.sh
 ./Register-DataGitBackupTask.ps1
 ./Register-DataGitPull.sh
@@ -318,7 +320,7 @@ Unregister Linux cron: `./Register-DataGitBackup.sh --uninstall`.
 
 ### Local copy of server data, keep PKM scripts
 
-`Pull-PkmDataKeepScripts.sh` / `.ps1` fetches `origin/<current-branch>` and restores `data/` in the **site root** working tree, then puts back local `data/pkm/scripts`. No commit or push. Run from the site root or from `upstream/` (same site folder). After `Update-HomelabUpstream`, the launcher is copied to the site root from the product package.
+`Pull-PkmDataKeepScripts.sh` / `.ps1` fetches `origin/<current-branch>` and restores `data/pkm` in the **site root** working tree (deletes extra local PKM files not on origin), then puts back local `data/pkm/scripts`. It does **not** restore `data/hub` (plugin installs stay). No commit or push. Run from the site root or from `upstream/` (same site folder). After `Update-HomelabUpstream`, the launcher is copied to the site root from the product package.
 
 ```bash
 ./Pull-PkmDataKeepScripts.sh
@@ -328,6 +330,18 @@ Unregister Linux cron: `./Register-DataGitBackup.sh --uninstall`.
 ```powershell
 .\Pull-PkmDataKeepScripts.ps1
 .\upstream\Pull-PkmDataKeepScripts.ps1
+```
+
+### Troubleshooting dump
+
+`Collect-HomelabDiag.sh` / `.ps1` prints mounts, Hub plugin ids, PKM page order, and whether Guacamole is in site compose. No document bodies and no passwords.
+
+```bash
+./Collect-HomelabDiag.sh
+```
+
+```powershell
+.\Collect-HomelabDiag.ps1
 ```
 
 ### Two servers — `Pull-DataGit`

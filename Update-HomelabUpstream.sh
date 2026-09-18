@@ -100,6 +100,8 @@ LAUNCHERS=(
   Pull-DataGit.ps1
   Pull-PkmDataKeepScripts.sh
   Pull-PkmDataKeepScripts.ps1
+  Collect-HomelabDiag.sh
+  Collect-HomelabDiag.ps1
   Register-DataGitPull.sh
   Register-DataGitPullTask.ps1
   Reindex-PkmFromDisk.sh

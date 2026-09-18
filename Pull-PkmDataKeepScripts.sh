@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Copies site data from origin, keeping local PKM scripts. Page order comes from origin.
+# Copies PKM data from origin, keeping local scripts. Does not touch data/hub. Page order comes from origin.
 # Run from the site instance root or from upstream/.
 #
 # Usage:
@@ -113,6 +113,24 @@ clear_pkm_sqlite_sidecars() {
   rm -f -- "$REPO_ROOT/data/pkm/pkm.db-wal" "$REPO_ROOT/data/pkm/pkm.db-shm"
 }
 
+remove_pkm_files_not_on_origin() {
+  local source="$1" pkm_root="$REPO_ROOT/data/pkm" rel
+  [[ -d "$pkm_root" ]] || return 0
+  local -A want=()
+  while IFS= read -r rel; do
+    [[ -n "$rel" ]] && want["$rel"]=1
+  done < <(git_auth ls-tree -r --name-only "$source" -- data/pkm)
+  while IFS= read -r -d '' file; do
+    rel="${file#"$REPO_ROOT"/}"
+    rel="${rel#/}"
+    case "$rel" in
+      data/pkm/scripts|data/pkm/scripts/*) continue ;;
+    esac
+    [[ -n "${want[$rel]:-}" ]] || rm -f -- "$file"
+  done < <(find "$pkm_root" -type f -print0)
+  find "$pkm_root" -depth -type d -empty ! -path "$pkm_root/scripts" ! -path "$pkm_root/scripts/*" -delete 2>/dev/null || true
+}
+
 stop_pkm_if_present() {
   local container="${HOMELAB_PKM_CONTAINER:-pkm-backend}"
   command -v docker >/dev/null 2>&1 || return 0
@@ -159,9 +177,11 @@ trap cleanup EXIT
 stop_pkm_if_present
 
 git_auth fetch origin "$BRANCH"
-git_auth restore --source "origin/${BRANCH}" --worktree -- data
+git_auth checkout "origin/${BRANCH}" -- data/pkm
+git_auth restore --staged -- data/pkm || true
+remove_pkm_files_not_on_origin "origin/${BRANCH}"
 clear_pkm_sqlite_sidecars
-echo "Restored data/ from origin/${BRANCH} (working tree only, site root ${REPO_ROOT})."
+echo "Restored data/pkm from origin/${BRANCH} (Hub data/ left untouched)."
 
 if [[ "$HAD_SCRIPTS" -eq 1 ]]; then
   rm -rf -- "$SCRIPTS_REL"
@@ -175,4 +195,4 @@ restore_pkm_positions
 reindex_pkm
 restore_pkm_positions
 
-echo "Done. Local scripts kept; page order and other data/ match origin. Nothing was committed or pushed."
+echo "Done. Local scripts kept; PKM tree/order match origin. Hub/Guacamole were not overwritten."

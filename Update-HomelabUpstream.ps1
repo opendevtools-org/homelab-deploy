@@ -8,7 +8,7 @@
 
   After pull, refreshes site-root launchers from upstream/:
     Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*, Pull-PkmDataKeepScripts.*,
-    Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
+    Collect-HomelabDiag.*, Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
     docker-compose.config.yml, docker-compose.https.yml, Caddyfile,
     README.site.md, the layered gitignore files, scriptkit/,
     agent-context/ (not site/), docker/*.example, and
@@ -249,6 +249,8 @@ $launcherNames = @(
   "Pull-DataGit.sh",
   "Pull-PkmDataKeepScripts.ps1",
   "Pull-PkmDataKeepScripts.sh",
+  "Collect-HomelabDiag.ps1",
+  "Collect-HomelabDiag.sh",
   "Register-DataGitPullTask.ps1",
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",
