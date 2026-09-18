@@ -356,6 +356,8 @@ if (-not $alreadySite) {
     "Register-DataGitBackup.sh",
     "Pull-DataGit.ps1",
     "Pull-DataGit.sh",
+    "Pull-PkmDataKeepScripts.ps1",
+    "Pull-PkmDataKeepScripts.sh",
     "Register-DataGitPullTask.ps1",
     "Register-DataGitPull.sh",
     "Reindex-PkmFromDisk.ps1",
@@ -534,7 +536,7 @@ Converted from a flat ``homelab-deploy`` install.
 - ``docker-compose.custom.yml`` — Hub/PKM image + cli mounts (site-owned)
 - ``docker-compose.apps.yml`` — extra apps / Market plugins (site-owned)
 - ``docker/`` — optional site Dockerfile (FROM published images)
-- ``cli/`` — site CLIs (not overwritten on product update)
+- ``cli/`` — ``lib/`` + ``homelab/`` (product); all site CLIs under ``cli/custom/`` (not overwritten)
 - ``scriptkit/`` — Python library for PKM launchers (refreshed from upstream)
 - ``agent-context/`` — Hub/PKM notes for agents; extras in ``agent-context/site/``
 - ``overrides/`` — optional code patches (see ``overrides/README.md``)
@@ -608,6 +610,8 @@ foreach ($name in @(
   "Register-DataGitBackup.sh",
   "Pull-DataGit.ps1",
   "Pull-DataGit.sh",
+  "Pull-PkmDataKeepScripts.ps1",
+  "Pull-PkmDataKeepScripts.sh",
   "Register-DataGitPullTask.ps1",
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",

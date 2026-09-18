@@ -197,6 +197,7 @@ if [[ "$already_site" -eq 0 ]]; then
     Backup-DataGit.ps1 Backup-DataGit.sh \
     Register-DataGitBackupTask.ps1 Register-DataGitBackup.sh \
     Pull-DataGit.ps1 Pull-DataGit.sh \
+    Pull-PkmDataKeepScripts.ps1 Pull-PkmDataKeepScripts.sh \
     Register-DataGitPullTask.ps1 Register-DataGitPull.sh \
     Reindex-PkmFromDisk.ps1 Reindex-PkmFromDisk.sh \
     docker-compose.config.yml \
@@ -321,7 +322,7 @@ cat >"$TARGET_DIR/README.md" <<EOF
 - \`docker-compose.custom.yml\` — Hub/PKM image + cli mounts (site-owned)
 - \`docker-compose.apps.yml\` — extra apps / Market plugins (site-owned)
 - \`docker/\` — optional site Dockerfile (\`FROM\` published images)
-- \`cli/\` — site CLIs (not overwritten on product update)
+- \`cli/\` — \`lib/\` + \`homelab/\` (product); all site CLIs under \`cli/custom/\` (not overwritten)
 - \`scriptkit/\` — Python library for PKM launchers (refreshed from upstream)
 - \`agent-context/\` — Hub/PKM notes for agents; extras in \`agent-context/site/\`
 - \`overrides/\` — optional code patches (see \`overrides/README.md\`)
@@ -383,6 +384,7 @@ for s in \
   Backup-DataGit.sh Backup-DataGit.ps1 \
   Register-DataGitBackup.sh Register-DataGitBackupTask.ps1 \
   Pull-DataGit.sh Pull-DataGit.ps1 \
+  Pull-PkmDataKeepScripts.sh Pull-PkmDataKeepScripts.ps1 \
   Register-DataGitPull.sh Register-DataGitPullTask.ps1 \
   Reindex-PkmFromDisk.sh Reindex-PkmFromDisk.ps1 \
   Merge-SqliteGitConflict.py \
@@ -399,6 +401,7 @@ done
 [[ -f "$TARGET_DIR/upstream/Backup-DataGit.sh" ]] && chmod +x "$TARGET_DIR/upstream/Backup-DataGit.sh" || true
 [[ -f "$TARGET_DIR/upstream/Register-DataGitBackup.sh" ]] && chmod +x "$TARGET_DIR/upstream/Register-DataGitBackup.sh" || true
 [[ -f "$TARGET_DIR/upstream/Pull-DataGit.sh" ]] && chmod +x "$TARGET_DIR/upstream/Pull-DataGit.sh" || true
+[[ -f "$TARGET_DIR/upstream/Pull-PkmDataKeepScripts.sh" ]] && chmod +x "$TARGET_DIR/upstream/Pull-PkmDataKeepScripts.sh" || true
 [[ -f "$TARGET_DIR/upstream/Register-DataGitPull.sh" ]] && chmod +x "$TARGET_DIR/upstream/Register-DataGitPull.sh" || true
 [[ -f "$TARGET_DIR/upstream/Reindex-PkmFromDisk.sh" ]] && chmod +x "$TARGET_DIR/upstream/Reindex-PkmFromDisk.sh" || true
 [[ -f "$TARGET_DIR/upstream/Refresh-SiteProductTrees.sh" ]] && chmod +x "$TARGET_DIR/upstream/Refresh-SiteProductTrees.sh" || true

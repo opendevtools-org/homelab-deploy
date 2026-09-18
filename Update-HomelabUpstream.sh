@@ -87,7 +87,7 @@ fi
 # Refresh site-root launchers from product package.
 # Also refreshes scriptkit/, agent-context/ (not site/), docker/*.example.
 # Never overwrites docker-compose.custom.yml, docker-compose.apps.yml,
-# docker/**/Dockerfile, or cli/.
+# README.md, docker/**/Dockerfile, or cli/.
 LAUNCHERS=(
   Update-HomelabUpstream.sh
   Update-HomelabUpstream.ps1
@@ -97,6 +97,8 @@ LAUNCHERS=(
   Register-DataGitBackupTask.ps1
   Pull-DataGit.sh
   Pull-DataGit.ps1
+  Pull-PkmDataKeepScripts.sh
+  Pull-PkmDataKeepScripts.ps1
   Register-DataGitPull.sh
   Register-DataGitPullTask.ps1
   Reindex-PkmFromDisk.sh
@@ -108,6 +110,7 @@ LAUNCHERS=(
   docker-compose.config.yml
   docker-compose.https.yml
   Caddyfile
+  README.site.md
 )
 REFRESHED=()
 for s in "${LAUNCHERS[@]}"; do

@@ -133,7 +133,7 @@ If an older site-root updater only refreshed the submodule, run the copy inside 
 | Extra OS packages (Java, Maven, …) | Copy `docker/pkm-backend/Dockerfile.example` → `Dockerfile`, then the `build:` snippet from `docker-compose.custom.example.yml` |
 | Heavy CLI cache (git, Maven) | Named volumes `site-cli-cache` / `site-cli-home` + one-shot chown in `docker-compose.config.yml` |
 | Shared Python helpers | `scriptkit/odt_scripts` (`PYTHONPATH=/app/scriptkit:/overrides`) |
-| Your commands | `cli/<name>/src/` + a PKM launcher under `data/pkm/scripts/<name>/` |
+| Your commands | `cli/custom/<name>/` + a PKM launcher under `data/pkm/scripts/<name>/` |
 | Extra apps / Market plugins | `docker-compose.apps.yml` |
 | Agent notes | `agent-context/` (product) and `agent-context/site/` (instance) |
 
@@ -211,6 +211,8 @@ Layout after convert:
 ./Backup-DataGit.ps1
 ./Pull-DataGit.sh
 ./Pull-DataGit.ps1
+./Pull-PkmDataKeepScripts.sh
+./Pull-PkmDataKeepScripts.ps1
 ./Register-DataGitBackup.sh
 ./Register-DataGitBackupTask.ps1
 ./Register-DataGitPull.sh
@@ -314,6 +316,20 @@ chmod +x Backup-DataGit.sh Register-DataGitBackup.sh
 
 Unregister Linux cron: `./Register-DataGitBackup.sh --uninstall`.
 
+### Local copy of server data, keep PKM scripts
+
+`Pull-PkmDataKeepScripts.sh` / `.ps1` fetches `origin/<current-branch>` and restores `data/` in the **site root** working tree, then puts back local `data/pkm/scripts`. No commit or push. Run from the site root or from `upstream/` (same site folder). After `Update-HomelabUpstream`, the launcher is copied to the site root from the product package.
+
+```bash
+./Pull-PkmDataKeepScripts.sh
+./upstream/Pull-PkmDataKeepScripts.sh
+```
+
+```powershell
+.\Pull-PkmDataKeepScripts.ps1
+.\upstream\Pull-PkmDataKeepScripts.ps1
+```
+
 ### Two servers — `Pull-DataGit`
 
 If both machines can receive edits, schedule Git on both:
@@ -364,7 +380,7 @@ PYTHONPATH=cli/lib:cli python -m homelab.cve check-jar-version --jar log4j-core 
 PYTHONPATH=cli/lib:cli python -m homelab.cve --config ./cve-sources.json check-fixed-cve --library openssl --version 3.0.16
 ```
 
-Site instance: `python custom/cve/main.py`. Copy `upstream/cli/homelab/cve/config/sources.example.json`. See [`cli/README.md`](./cli/README.md).
+Site instance: site CLIs live under `cli/custom/<name>/`. The product package does not define the tool set. See [`cli/README.md`](./cli/README.md).
 
 ## License
 

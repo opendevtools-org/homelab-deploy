@@ -7,13 +7,13 @@
   or from upstream/ itself.
 
   After pull, refreshes site-root launchers from upstream/:
-    Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*,
+    Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*, Pull-PkmDataKeepScripts.*,
     Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
     docker-compose.config.yml, docker-compose.https.yml, Caddyfile,
-    the layered gitignore files, scriptkit/, agent-context/ (not site/),
-    and docker/*.example. Does not overwrite docker-compose.custom.yml,
-    docker-compose.apps.yml,
-    docker/**/Dockerfile, or cli/.
+    README.site.md, the layered gitignore files, scriptkit/,
+    agent-context/ (not site/), and docker/*.example.
+    Does not overwrite docker-compose.custom.yml, docker-compose.apps.yml,
+    README.md, docker/**/Dockerfile, or cli/.
 
 .PARAMETER Ports
   lan | local. Default: lan
@@ -246,6 +246,8 @@ $launcherNames = @(
   "Register-DataGitBackup.sh",
   "Pull-DataGit.ps1",
   "Pull-DataGit.sh",
+  "Pull-PkmDataKeepScripts.ps1",
+  "Pull-PkmDataKeepScripts.sh",
   "Register-DataGitPullTask.ps1",
   "Register-DataGitPull.sh",
   "Reindex-PkmFromDisk.ps1",
@@ -256,7 +258,8 @@ $launcherNames = @(
   "Refresh-SiteProductTrees.sh",
   "docker-compose.config.yml",
   "docker-compose.https.yml",
-  "Caddyfile"
+  "Caddyfile",
+  "README.site.md"
 )
 $refreshed = @()
 foreach ($name in $launcherNames) {
