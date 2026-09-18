@@ -153,10 +153,18 @@ function Remove-PkmFilesNotOnOrigin {
   param([string]$Source)
   $raw = Invoke-Git ls-tree -r --name-only $Source -- "data/pkm"
   $want = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
-  foreach ($line in @($raw)) {
+  $text = ($raw | Out-String)
+  foreach ($line in ($text -split "[\r\n]+")) {
     $p = [string]$line
-    if (-not [string]::IsNullOrWhiteSpace($p)) { [void]$want.Add($p.Trim().Replace('\', '/')) }
+    $p = $p.Trim().Replace('\', '/')
+    if ($p -notlike "data/pkm/*") { continue }
+    [void]$want.Add($p)
   }
+  if ($want.Count -lt 1) {
+    Write-Host "Skip extra-file cleanup: origin ls-tree for data/pkm was empty."
+    return
+  }
+  Write-Host ("Origin data/pkm file count: {0}" -f $want.Count)
   $pkmRoot = Join-Path $repoRoot "data\pkm"
   if (-not (Test-Path $pkmRoot)) { return }
   $files = Get-ChildItem -LiteralPath $pkmRoot -Recurse -Force -File -ErrorAction SilentlyContinue

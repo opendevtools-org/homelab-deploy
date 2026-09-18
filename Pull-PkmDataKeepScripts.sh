@@ -118,8 +118,14 @@ remove_pkm_files_not_on_origin() {
   [[ -d "$pkm_root" ]] || return 0
   local -A want=()
   while IFS= read -r rel; do
-    [[ -n "$rel" ]] && want["$rel"]=1
+    rel="${rel%$'\r'}"
+    [[ "$rel" == data/pkm/* ]] && want["$rel"]=1
   done < <(git_auth ls-tree -r --name-only "$source" -- data/pkm)
+  if [[ ${#want[@]} -lt 1 ]]; then
+    echo "Skip extra-file cleanup: origin ls-tree for data/pkm was empty."
+    return 0
+  fi
+  echo "Origin data/pkm file count: ${#want[@]}"
   while IFS= read -r -d '' file; do
     rel="${file#"$REPO_ROOT"/}"
     rel="${rel#/}"
