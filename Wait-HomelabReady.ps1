@@ -263,6 +263,7 @@ if (Test-ContainerExists "homelab-guacamole") {
       & docker network connect homelab_default homelab-guacamole 2>$null | Out-Null
       $ErrorActionPreference = $prev
       $restartedDbWait = $true
+      Write-Ts "If it stays on waiting for DB, /config must be a Docker named volume (not a Windows bind mount)."
     }
     if (($elapsed % 30) -eq 0) {
       $ErrorActionPreference = "Continue"

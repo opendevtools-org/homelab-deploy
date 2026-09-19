@@ -143,6 +143,7 @@ if exists homelab-guacamole; then
       sleep 3
       docker network connect homelab_default homelab-guacamole >/dev/null 2>&1 || true
       restarted_db=1
+      log "If it stays on waiting for DB, /config must be a Docker named volume (not a Windows bind mount)."
     fi
     if (( elapsed % 30 == 0 )); then
       ips="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}} {{end}}' homelab-guacamole 2>/dev/null || true)"
