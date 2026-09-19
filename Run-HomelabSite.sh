@@ -73,4 +73,5 @@ pull="$SITE_ROOT/Pull-DataGit.sh"
 
 echo "=== 2/2 Pull-DataGit (commit data, pull, merge conflicts, push) ==="
 chmod +x "$pull" 2>/dev/null || true
+export HOMELAB_SKIP_MARKET_PLUGINS=1
 exec /bin/bash "$pull"

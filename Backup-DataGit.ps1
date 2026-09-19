@@ -505,7 +505,10 @@ try {
   Send-Notification -Level "INFO" -Message $ok
   Invoke-PkmDiskReindex
   $startPlugins = Join-Path $repoRoot "Start-MarketPlugins.ps1"
-  if (Test-Path $startPlugins) {
+  $skipPlugins = [Environment]::GetEnvironmentVariable("HOMELAB_SKIP_MARKET_PLUGINS")
+  if ($skipPlugins -match '^(1|true|yes)$') {
+    Write-Host "Skipping Start-MarketPlugins (already run in this site refresh)."
+  } elseif (Test-Path $startPlugins) {
     & $startPlugins
   }
   Set-SqliteSkipWorktree -Enable $true

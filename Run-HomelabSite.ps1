@@ -77,5 +77,10 @@ if (-not (Test-Path $pull)) {
 }
 
 Write-Host "=== 2/2 Pull-DataGit (commit data, pull, merge conflicts, push) ==="
-& $pull
-exit $LASTEXITCODE
+$env:HOMELAB_SKIP_MARKET_PLUGINS = "1"
+try {
+  & $pull
+  exit $LASTEXITCODE
+} finally {
+  Remove-Item Env:HOMELAB_SKIP_MARKET_PLUGINS -ErrorAction SilentlyContinue
+}
