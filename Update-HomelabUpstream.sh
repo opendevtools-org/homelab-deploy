@@ -13,6 +13,7 @@ PORTS="lan"
 COMMIT=0
 PUSH=0
 START=0
+AFTER_PULL=0
 
 usage() {
   log "Usage: $0 [--ports lan|local] [--commit] [--push] [--start]"
@@ -25,6 +26,7 @@ while [[ $# -gt 0 ]]; do
     --commit) COMMIT=1; shift ;;
     --push) PUSH=1; COMMIT=1; shift ;;
     --start) START=1; shift ;;
+    --after-pull) AFTER_PULL=1; shift ;;
     -h|--help) usage 0 ;;
     *) log "Unknown option: $1" >&2; usage 1 ;;
   esac
@@ -55,16 +57,28 @@ command -v git >/dev/null || { log "git required" >&2; exit 1; }
 [[ "$START" -eq 1 ]] && command -v docker >/dev/null || true
 [[ "$START" -eq 1 ]] && { command -v docker >/dev/null || { log "docker required" >&2; exit 1; }; }
 
-log "Site root : $SITE_ROOT"
-log "Updating  : $UPSTREAM"
+if [[ "$AFTER_PULL" -eq 0 ]]; then
+  log "Site root : $SITE_ROOT"
+  log "Updating  : $UPSTREAM"
+  cd "$UPSTREAM"
+  git fetch origin
+  git checkout main
+  git reset --hard origin/main
+  REV="$(git rev-parse --short HEAD)"
+  log "Upstream  : $REV"
+  log "Loading updater from disk after pull..."
+  canonical="$UPSTREAM/Update-HomelabUpstream.sh"
+  reexec_args=(--after-pull)
+  [[ "$PORTS" != "lan" ]] && reexec_args+=(--ports "$PORTS")
+  [[ "$PUSH" -eq 1 ]] && reexec_args+=(--push)
+  [[ "$PUSH" -eq 0 && "$COMMIT" -eq 1 ]] && reexec_args+=(--commit)
+  [[ "$START" -eq 1 ]] && reexec_args+=(--start)
+  exec /bin/bash "$canonical" "${reexec_args[@]}"
+fi
 
 cd "$UPSTREAM"
-git fetch origin
-git checkout main
-# Prefer hard reset: upstream may be force-pushed (orphan/history rewrite).
-git reset --hard origin/main
 REV="$(git rev-parse --short HEAD)"
-log "Upstream  : $REV"
+log "Using updater ${REV} from disk."
 
 for n in Collect-HomelabDiag.sh Collect-HomelabDiag.ps1 Dump-PkmSidebar.py; do
   if [[ -f "$UPSTREAM/$n" ]]; then
@@ -80,25 +94,6 @@ done
 log "$uf"
 
 # Site-root copies can predate new product trees (scriptkit/, agent-context/, …).
-# After pull, re-enter the updater that just landed in upstream/.
-if [[ -z "${HOMELAB_UPSTREAM_REEXEC:-}" ]]; then
-  canonical="$UPSTREAM/Update-HomelabUpstream.sh"
-  if [[ -f "$canonical" ]]; then
-    this="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
-    can="$(cd "$(dirname "$canonical")" && pwd)/$(basename "$canonical")"
-    if [[ "$this" != "$can" ]]; then
-      log "Re-running updater from upstream/ so new product files are copied onto the site root."
-      export HOMELAB_UPSTREAM_REEXEC=1
-      reexec_args=()
-      [[ "$PORTS" != "lan" ]] && reexec_args+=(--ports "$PORTS")
-      [[ "$PUSH" -eq 1 ]] && reexec_args+=(--push)
-      [[ "$PUSH" -eq 0 && "$COMMIT" -eq 1 ]] && reexec_args+=(--commit)
-      [[ "$START" -eq 1 ]] && reexec_args+=(--start)
-      exec /bin/bash "$canonical" "${reexec_args[@]}"
-    fi
-  fi
-fi
-
 # Refresh site-root launchers from product package.
 # Also refreshes scriptkit/, agent-context/ (not site/), docker/*.example,
 # and overrides/hub-platform/sitecustomize.py.
@@ -268,22 +263,14 @@ if [[ "$START" -eq 1 ]]; then
     chmod +x "$plugins" 2>/dev/null || true
     HOMELAB_SKIP_MARKET_COMPOSE=1 HOMELAB_PORTS="$PORTS" /bin/bash "$plugins" || log "Start-MarketPlugins did not fully succeed." >&2
   fi
-  log "Starting Compose (stop old containers if names conflict)..."
-  for n in pkm-backend pkm-frontend home-hub home-hub-platform pkm-https; do
-    docker rm -f "$n" >/dev/null 2>&1 || true
-  done
+  log "Starting Compose..."
+  export BUILDKIT_PROGRESS=quiet
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
     -f docker-compose.custom.yml \
-    -f docker-compose.apps.yml pull
-  docker compose --project-directory . \
-    -f upstream/docker-compose.backend.yml \
-    -f "upstream/$PORTS_FILE" \
-    -f docker-compose.config.yml \
-    -f docker-compose.custom.yml \
-    -f docker-compose.apps.yml up -d
+    -f docker-compose.apps.yml up -d --pull always
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
@@ -304,23 +291,14 @@ if [[ "$START" -eq 1 ]]; then
       -f upstream/docker-compose.frontend.yml \
       -f "upstream/$FRONTEND_PORTS_FILE" \
       "${extra_fe[@]}" \
-      -f docker-compose.https.yml pull
-    docker compose --project-directory . \
-      -f upstream/docker-compose.frontend.yml \
-      -f "upstream/$FRONTEND_PORTS_FILE" \
-      "${extra_fe[@]}" \
-      -f docker-compose.https.yml up -d
+      -f docker-compose.https.yml up -d --pull always
   else
     extra_fe=()
     [[ -f docker-compose.frontend.apps.yml ]] && extra_fe+=(-f docker-compose.frontend.apps.yml)
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
       -f "upstream/$FRONTEND_PORTS_FILE" \
-      "${extra_fe[@]}" pull
-    docker compose --project-directory . \
-      -f upstream/docker-compose.frontend.yml \
-      -f "upstream/$FRONTEND_PORTS_FILE" \
-      "${extra_fe[@]}" up -d
+      "${extra_fe[@]}" up -d --pull always
   fi
   log "Compose up done."
 

@@ -46,7 +46,8 @@ param(
 
   [switch]$Commit,
   [switch]$Push,
-  [switch]$Start
+  [switch]$Start,
+  [switch]$AfterPull
 )
 
 Set-StrictMode -Version Latest
@@ -204,16 +205,28 @@ function Sync-GitIgnore {
   [System.IO.File]::WriteAllText($effectivePath, $content.TrimEnd() + "`n", [System.Text.UTF8Encoding]::new($false))
 }
 
-Write-Ts ("Site root : {0}" -f $siteRoot)
-Write-Ts ("Updating  : {0}" -f $upstream)
+if (-not $AfterPull) {
+  Write-Ts ("Site root : {0}" -f $siteRoot)
+  Write-Ts ("Updating  : {0}" -f $upstream)
+  Set-Location $upstream
+  Invoke-Git fetch origin | Out-Null
+  Invoke-Git checkout main | Out-Null
+  Invoke-Git reset --hard origin/main | Out-Null
+  $rev = (Invoke-Git rev-parse --short HEAD | Select-Object -Last 1).ToString().Trim()
+  Write-Ts ("Upstream  : {0}" -f $rev)
+  $canonical = Join-Path $upstream "Update-HomelabUpstream.ps1"
+  Write-Ts "Loading updater from disk after pull..."
+  $reArgs = @{ Ports = $Ports; AfterPull = $true }
+  if ($Commit) { $reArgs["Commit"] = $true }
+  if ($Push) { $reArgs["Push"] = $true }
+  if ($Start) { $reArgs["Start"] = $true }
+  & $canonical @reArgs
+  exit $LASTEXITCODE
+}
 
 Set-Location $upstream
-Invoke-Git fetch origin | Out-Null
-Invoke-Git checkout main | Out-Null
-# Prefer hard reset: upstream may be force-pushed (orphan/history rewrite).
-Invoke-Git reset --hard origin/main | Out-Null
 $rev = (Invoke-Git rev-parse --short HEAD | Select-Object -Last 1).ToString().Trim()
-Write-Ts ("Upstream  : {0}" -f $rev)
+Write-Ts ("Using updater {0} from disk." -f $rev)
 
 foreach ($n in @("Collect-HomelabDiag.ps1", "Collect-HomelabDiag.sh", "Dump-PkmSidebar.py")) {
   $src = Join-Path $upstream $n
@@ -225,35 +238,6 @@ foreach ($n in @("Collect-HomelabDiag.ps1", "Collect-HomelabDiag.sh", "Dump-PkmS
 $probe = @("docker-compose.backend.yml", "Collect-HomelabDiag.ps1", "Update-HomelabUpstream.ps1")
 $probeText = ($probe | ForEach-Object { "{0}={1}" -f $_, (Test-Path -LiteralPath (Join-Path $upstream $_)) }) -join ", "
 Write-Ts ("Upstream files: {0}" -f $probeText)
-
-# Site-root copies can predate new product trees (scriptkit/, agent-context/, …).
-# After pull, re-enter the updater that just landed in upstream/ so those
-# copies always run, even when this process started from an older site-root file.
-if (-not $env:HOMELAB_UPSTREAM_REEXEC) {
-  $canonical = Join-Path $upstream "Update-HomelabUpstream.ps1"
-  if (Test-Path -LiteralPath $canonical) {
-    $running = $PSCommandPath
-    $same = $false
-    try {
-      $same = (
-        (Resolve-Path -LiteralPath $running).Path -eq
-        (Resolve-Path -LiteralPath $canonical).Path
-      )
-    } catch {
-      $same = $false
-    }
-    if (-not $same) {
-      Write-Ts "Re-running updater from upstream/ so new product files are copied onto the site root."
-      $env:HOMELAB_UPSTREAM_REEXEC = "1"
-      $reArgs = @{ Ports = $Ports }
-      if ($Commit) { $reArgs["Commit"] = $true }
-      if ($Push) { $reArgs["Push"] = $true }
-      if ($Start) { $reArgs["Start"] = $true }
-      & $canonical @reArgs
-      exit $LASTEXITCODE
-    }
-  }
-}
 
 Sync-GitIgnore
 
@@ -418,13 +402,12 @@ if ($Start) {
       Remove-Item Env:HOMELAB_SKIP_MARKET_COMPOSE -ErrorAction SilentlyContinue
     }
   }
-  Write-Ts "Starting Compose (stop old containers if names conflict)..."
+  Write-Ts "Starting Compose..."
   $prev = $ErrorActionPreference
+  $prevProgress = $env:BUILDKIT_PROGRESS
   try {
     $ErrorActionPreference = "Continue"
-    foreach ($n in @("pkm-backend", "pkm-frontend", "home-hub", "home-hub-platform", "pkm-https")) {
-      & docker rm -f $n 2>&1 | Out-Null
-    }
+    $env:BUILDKIT_PROGRESS = "quiet"
     $backendComposeArgs = @(
       "compose", "--project-directory", ".",
       "-f", "upstream/docker-compose.backend.yml",
@@ -433,9 +416,7 @@ if ($Start) {
       "-f", "docker-compose.custom.yml",
       "-f", "docker-compose.apps.yml"
     )
-    $code = Invoke-DockerCommand ($backendComposeArgs + @("pull"))
-    if ($code -ne 0) { throw "docker compose pull failed" }
-    $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d"))
+    $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d", "--pull", "always"))
     if ($code -ne 0) { throw "docker compose up failed" }
     $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force"))
     $gone = & docker ps -aq --filter "label=homelab.config-job=true" --filter "status=exited" 2>$null
@@ -452,13 +433,16 @@ if ($Start) {
       Write-Ts "LAN HTTPS overlay (Caddy) enabled."
       $frontendComposeArgs += @("-f", "docker-compose.https.yml")
     }
-    $code = Invoke-DockerCommand ($frontendComposeArgs + @("pull"))
-    if ($code -ne 0) { throw "docker compose frontend pull failed" }
-    $code = Invoke-DockerCommand ($frontendComposeArgs + @("up", "-d"))
+    $code = Invoke-DockerCommand ($frontendComposeArgs + @("up", "-d", "--pull", "always"))
     if ($code -ne 0) { throw "docker compose frontend up failed" }
     Write-Ts "Compose up done."
   } finally {
     $ErrorActionPreference = $prev
+    if ($null -eq $prevProgress) {
+      Remove-Item Env:BUILDKIT_PROGRESS -ErrorAction SilentlyContinue
+    } else {
+      $env:BUILDKIT_PROGRESS = $prevProgress
+    }
     Clear-AnonymousDockerConfig
   }
 
