@@ -7,13 +7,15 @@
 #   ./Update-HomelabUpstream.sh --commit --push --start
 set -euo pipefail
 
+log() { printf '%s\n' "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
+
 PORTS="lan"
 COMMIT=0
 PUSH=0
 START=0
 
 usage() {
-  echo "Usage: $0 [--ports lan|local] [--commit] [--push] [--start]"
+  log "Usage: $0 [--ports lan|local] [--commit] [--push] [--start]"
   exit "${1:-0}"
 }
 
@@ -24,11 +26,11 @@ while [[ $# -gt 0 ]]; do
     --push) PUSH=1; COMMIT=1; shift ;;
     --start) START=1; shift ;;
     -h|--help) usage 0 ;;
-    *) echo "Unknown option: $1" >&2; usage 1 ;;
+    *) log "Unknown option: $1" >&2; usage 1 ;;
   esac
 done
 
-[[ "$PORTS" == "lan" || "$PORTS" == "local" ]] || { echo "--ports must be lan or local" >&2; exit 1; }
+[[ "$PORTS" == "lan" || "$PORTS" == "local" ]] || { log "--ports must be lan or local" >&2; exit 1; }
 PORTS_FILE="docker-compose.${PORTS}.yml"
 FRONTEND_PORTS_FILE="docker-compose.frontend.${PORTS}.yml"
 
@@ -45,16 +47,16 @@ elif [[ -f "$HERE/upstream/docker-compose.yml" || -f "$HERE/upstream/docker-comp
   SITE_ROOT="$HERE"
   UPSTREAM="$HERE/upstream"
 else
-  echo "Run from site root (has upstream/) or from upstream/ inside a site instance." >&2
+  log "Run from site root (has upstream/) or from upstream/ inside a site instance." >&2
   exit 1
 fi
 
-command -v git >/dev/null || { echo "git required" >&2; exit 1; }
+command -v git >/dev/null || { log "git required" >&2; exit 1; }
 [[ "$START" -eq 1 ]] && command -v docker >/dev/null || true
-[[ "$START" -eq 1 ]] && { command -v docker >/dev/null || { echo "docker required" >&2; exit 1; }; }
+[[ "$START" -eq 1 ]] && { command -v docker >/dev/null || { log "docker required" >&2; exit 1; }; }
 
-echo "Site root : $SITE_ROOT"
-echo "Updating  : $UPSTREAM"
+log "Site root : $SITE_ROOT"
+log "Updating  : $UPSTREAM"
 
 cd "$UPSTREAM"
 git fetch origin
@@ -62,20 +64,20 @@ git checkout main
 # Prefer hard reset: upstream may be force-pushed (orphan/history rewrite).
 git reset --hard origin/main
 REV="$(git rev-parse --short HEAD)"
-echo "Upstream  : $REV"
+log "Upstream  : $REV"
 
 for n in Collect-HomelabDiag.sh Collect-HomelabDiag.ps1 Dump-PkmSidebar.py; do
   if [[ -f "$UPSTREAM/$n" ]]; then
     cp -a "$UPSTREAM/$n" "$SITE_ROOT/$n"
     [[ "$n" == *.sh ]] && chmod +x "$SITE_ROOT/$n"
-    echo "Copied $n to site root."
+    log "Copied $n to site root."
   fi
 done
-echo -n "Upstream files:"
+uf="Upstream files:"
 for n in docker-compose.backend.yml Collect-HomelabDiag.sh Update-HomelabUpstream.sh; do
-  if [[ -f "$UPSTREAM/$n" ]]; then echo -n " $n=yes"; else echo -n " $n=NO"; fi
+  if [[ -f "$UPSTREAM/$n" ]]; then uf="$uf $n=yes"; else uf="$uf $n=NO"; fi
 done
-echo
+log "$uf"
 
 # Site-root copies can predate new product trees (scriptkit/, agent-context/, …).
 # After pull, re-enter the updater that just landed in upstream/.
@@ -85,7 +87,7 @@ if [[ -z "${HOMELAB_UPSTREAM_REEXEC:-}" ]]; then
     this="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/$(basename "${BASH_SOURCE[0]}")"
     can="$(cd "$(dirname "$canonical")" && pwd)/$(basename "$canonical")"
     if [[ "$this" != "$can" ]]; then
-      echo "Re-running updater from upstream/ so new product files are copied onto the site root."
+      log "Re-running updater from upstream/ so new product files are copied onto the site root."
       export HOMELAB_UPSTREAM_REEXEC=1
       reexec_args=()
       [[ "$PORTS" != "lan" ]] && reexec_args+=(--ports "$PORTS")
@@ -151,14 +153,14 @@ for s in "${LAUNCHERS[@]}"; do
   fi
 done
 if [[ ${#REFRESHED[@]} -gt 0 ]]; then
-  echo "Refreshed site-root: ${REFRESHED[*]}"
+  log "Refreshed site-root: ${REFRESHED[*]}"
 fi
 
 OVERRIDE_REL="overrides/hub-platform/sitecustomize.py"
 if [[ -f "$UPSTREAM/$OVERRIDE_REL" ]]; then
   mkdir -p "$SITE_ROOT/overrides/hub-platform"
   cp -a "$UPSTREAM/$OVERRIDE_REL" "$SITE_ROOT/$OVERRIDE_REL"
-  echo "Refreshed $OVERRIDE_REL"
+  log "Refreshed $OVERRIDE_REL"
 fi
 
 GITIGNORE_PLACEHOLDER='# Site-specific ignore rules go here. Product rules are in .gitignore.upstream.'
@@ -208,9 +210,9 @@ fi
 if [[ -f "$UPSTREAM/Refresh-SiteProductTrees.sh" ]]; then
   chmod +x "$UPSTREAM/Refresh-SiteProductTrees.sh" 2>/dev/null || true
   /bin/bash "$UPSTREAM/Refresh-SiteProductTrees.sh" "$UPSTREAM" "$SITE_ROOT"
-  echo "Copied scriptkit/, agent-context/, docker examples onto the site root."
+  log "Copied scriptkit/, agent-context/, docker examples onto the site root."
 else
-  echo "Refresh-SiteProductTrees.sh missing in upstream/; site-root scriptkit/ was not refreshed." >&2
+  log "Refresh-SiteProductTrees.sh missing in upstream/; site-root scriptkit/ was not refreshed." >&2
 fi
 
 cd "$SITE_ROOT"
@@ -231,7 +233,7 @@ https_overlay_enabled() {
 }
 
 if [[ "$COMMIT" -eq 1 ]]; then
-  [[ -d "$SITE_ROOT/.git" ]] || { echo "No .git in site root" >&2; exit 1; }
+  [[ -d "$SITE_ROOT/.git" ]] || { log "No .git in site root" >&2; exit 1; }
   git add upstream
   for s in "${LAUNCHERS[@]}"; do
     [[ -f "$s" ]] && git add "$s" || true
@@ -240,27 +242,27 @@ if [[ "$COMMIT" -eq 1 ]]; then
   git add scriptkit agent-context docker docker-compose.custom.example.yml docker-compose.apps.example.yml 2>/dev/null || true
   if [[ -n "$(git status --porcelain -- upstream .gitignore .gitignore.custom .gitignore.upstream scriptkit agent-context docker docker-compose.custom.example.yml docker-compose.apps.example.yml "${LAUNCHERS[@]}" 2>/dev/null || true)" ]]; then
     git commit -m "Bump homelab-deploy upstream (${REV})."
-    echo "Committed submodule pointer."
+    log "Committed submodule pointer."
   else
-    echo "Upstream pointer unchanged; nothing to commit."
+    log "Upstream pointer unchanged; nothing to commit."
   fi
 fi
 
 if [[ "$PUSH" -eq 1 ]]; then
   branch="$(git rev-parse --abbrev-ref HEAD)"
-  [[ -n "$branch" && "$branch" != "HEAD" ]] || { echo "Detached HEAD is not supported for --push." >&2; exit 1; }
+  [[ -n "$branch" && "$branch" != "HEAD" ]] || { log "Detached HEAD is not supported for --push." >&2; exit 1; }
   git fetch origin
   if ! git pull --rebase --autostash origin "$branch"; then
     git rebase --abort >/dev/null 2>&1 || true
     git merge --no-edit "origin/$branch"
   fi
   git push origin "$branch"
-  echo "Pushed."
+  log "Pushed."
 fi
 
 if [[ "$START" -eq 1 ]]; then
-  [[ -f .env ]] || { echo "Missing .env in site root" >&2; exit 1; }
-  echo "Starting Compose (stop old containers if names conflict)..."
+  [[ -f .env ]] || { log "Missing .env in site root" >&2; exit 1; }
+  log "Starting Compose (stop old containers if names conflict)..."
   for n in pkm-backend pkm-frontend home-hub home-hub-platform pkm-https; do
     docker rm -f "$n" >/dev/null 2>&1 || true
   done
@@ -289,7 +291,7 @@ if [[ "$START" -eq 1 ]]; then
     docker rm -f $ids >/dev/null 2>&1 || true
   fi
   if https_overlay_enabled; then
-    echo "LAN HTTPS overlay (Caddy) enabled."
+    log "LAN HTTPS overlay (Caddy) enabled."
     extra_fe=()
     [[ -f docker-compose.frontend.apps.yml ]] && extra_fe+=(-f docker-compose.frontend.apps.yml)
     docker compose --project-directory . \
@@ -314,36 +316,36 @@ if [[ "$START" -eq 1 ]]; then
       -f "upstream/$FRONTEND_PORTS_FILE" \
       "${extra_fe[@]}" up -d
   fi
-  echo "Compose up done."
+  log "Compose up done."
 
   helper="$SITE_ROOT/Reindex-PkmFromDisk.sh"
   if [[ ! -f "$helper" ]]; then
-    echo "PKM disk reindex skipped (Reindex-PkmFromDisk.sh not found)."
+    log "PKM disk reindex skipped (Reindex-PkmFromDisk.sh not found)."
   else
-    echo "Importing PKM pages, files, PDFs, and bookmarks from disk..."
+    log "Importing PKM pages, files, PDFs, and bookmarks from disk..."
     chmod +x "$helper" 2>/dev/null || true
     set +e
     /bin/bash "$helper" --skip-restart
     reindex_code=$?
     set -e
     if [[ "$reindex_code" -ne 0 ]]; then
-      echo "PKM disk reindex failed after Compose up. Use Import from disk in the PKM UI if items are missing." >&2
+      log "PKM disk reindex failed after Compose up. Use Import from disk in the PKM UI if items are missing." >&2
     fi
   fi
 fi
 
 plugins="$SITE_ROOT/Start-MarketPlugins.sh"
 if [[ -f "$plugins" ]]; then
-  echo "Starting market plugins on homelab-backend / homelab-frontend..."
+  log "Starting market plugins on homelab-backend / homelab-frontend..."
   chmod +x "$plugins" 2>/dev/null || true
-  HOMELAB_PORTS="$PORTS" /bin/bash "$plugins" || echo "Start-MarketPlugins did not fully succeed." >&2
+  HOMELAB_PORTS="$PORTS" /bin/bash "$plugins" || log "Start-MarketPlugins did not fully succeed." >&2
 fi
 
 wait_ready="$SITE_ROOT/Wait-HomelabReady.sh"
 if [[ -f "$wait_ready" ]]; then
-  echo "Waiting until PKM API and web UI are ready..."
+  log "Waiting until PKM API and web UI are ready..."
   chmod +x "$wait_ready" 2>/dev/null || true
   HOMELAB_PORTS="$PORTS" /bin/bash "$wait_ready"
 fi
 
-echo "Done."
+log "Done."

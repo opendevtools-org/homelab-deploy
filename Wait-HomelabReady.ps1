@@ -17,6 +17,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Write-Ts {
+  param($Message)
+  Write-Host ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message)
+}
+
 function Test-SiteRoot([string]$d) {
   return (Test-Path (Join-Path $d "docker-compose.custom.yml")) `
     -or (Test-Path (Join-Path $d ".env")) `
@@ -58,14 +63,14 @@ function Test-ContainerExists([string]$Name) {
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-  Write-Host "Wait-HomelabReady skipped (docker not found)."
+  Write-Ts "Wait-HomelabReady skipped (docker not found)."
   exit 0
 }
 
 function Start-Named([string]$Name) {
   if (-not (Test-ContainerExists $Name)) { return }
   if (Test-ContainerRunning $Name) { return }
-  Write-Host ("Starting {0}..." -f $Name)
+  Write-Ts ("Starting {0}..." -f $Name)
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
   & docker start $Name | Out-Null
@@ -73,7 +78,7 @@ function Start-Named([string]$Name) {
 }
 
 if (-not (Test-ContainerExists "pkm-backend")) {
-  Write-Host "pkm-backend missing; running Compose backend up..."
+  Write-Ts "pkm-backend missing; running Compose backend up..."
   $backendArgs = @("compose", "--project-directory", $siteRoot)
   $upstreamBe = Join-Path $siteRoot "upstream\docker-compose.backend.yml"
   if (Test-Path $upstreamBe) {
@@ -100,7 +105,7 @@ if (-not (Test-ContainerExists "pkm-backend")) {
 }
 
 if (-not (Test-ContainerExists "pkm-frontend")) {
-  Write-Host "pkm-frontend missing; running Compose frontend up..."
+  Write-Ts "pkm-frontend missing; running Compose frontend up..."
   $frontendArgs = @("compose", "--project-directory", $siteRoot)
   $upstreamFe = Join-Path $siteRoot "upstream\docker-compose.frontend.yml"
   if (Test-Path $upstreamFe) {
@@ -147,7 +152,7 @@ function Test-PkmApi {
   return $ok
 }
 
-Write-Host "Waiting for PKM API on pkm-backend..."
+Write-Ts "Waiting for PKM API on pkm-backend..."
 $ok = $false
 for ($i = 0; $i -lt 90; $i++) {
   if (Test-PkmApi) { $ok = $true; break }
@@ -157,7 +162,7 @@ if (-not $ok) {
   throw "PKM API did not become healthy on pkm-backend. Check: docker logs pkm-backend"
 }
 
-Write-Host "Restarting Hub/PKM nginx so they resolve pkm-backend / hub-platform..."
+Write-Ts "Restarting Hub/PKM nginx so they resolve pkm-backend / hub-platform..."
 $prev = $ErrorActionPreference
 $ErrorActionPreference = "Continue"
 foreach ($n in @("pkm-frontend", "home-hub")) {
@@ -175,7 +180,7 @@ function Test-PkmViaNginx {
   return $ok
 }
 
-Write-Host "Waiting until pkm-frontend can reach pkm-backend..."
+Write-Ts "Waiting until pkm-frontend can reach pkm-backend..."
 $ok = $false
 for ($i = 0; $i -lt 30; $i++) {
   if (Test-PkmViaNginx) { $ok = $true; break }
@@ -185,7 +190,7 @@ if (-not $ok) {
   throw "pkm-frontend still cannot reach pkm-backend:8000 (502). Both must be on homelab_default."
 }
 
-Write-Host "Hub/PKM ready (API healthy, nginx can proxy)."
+Write-Ts "Hub/PKM ready (API healthy, nginx can proxy)."
 
 if (Test-ContainerExists "homelab-guacamole") {
   Start-Named "homelab-guacamole"
@@ -203,18 +208,29 @@ if (Test-ContainerExists "homelab-guacamole") {
     $ErrorActionPreference = $p
     return $ok
   }
-  Write-Host "Checking Guacamole (skip after 25s if Tomcat is still starting)..."
+  Write-Ts "Checking Guacamole (skip after 25s if Tomcat is still starting)..."
   $ok = $false
   for ($i = 1; $i -le 5; $i++) {
     if (Test-Guacamole) { $ok = $true; break }
-    Write-Host ("  still starting ({0}s)" -f ($i * 5))
+    Write-Ts ("  still starting ({0}s)" -f ($i * 5))
     Start-Sleep -Seconds 5
   }
   if (-not $ok) {
-    Write-Host "Guacamole not ready yet; open Hub later or wait on /p/guacamole/ (Hub retries)."
+    Write-Ts "Guacamole not ready yet; open Hub later or wait on /p/guacamole/ (Hub retries)."
   } else {
-    Write-Host "Guacamole is up."
+    Write-Ts "Guacamole is up."
   }
 }
+
+$prev = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+$gone = @(
+  & docker ps -aq --filter "label=com.docker.compose.project=homelab-backend" --filter "status=exited" 2>$null
+)
+if ($gone -and $gone.Count -gt 0) {
+  Write-Ts "Removing exited backend init jobs..."
+  $null = & docker rm -f @gone 2>$null
+}
+$ErrorActionPreference = $prev
 
 exit 0

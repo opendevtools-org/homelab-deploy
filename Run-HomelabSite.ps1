@@ -25,6 +25,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function Write-Ts {
+  param($Message)
+  Write-Host ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $Message)
+}
+
 function Test-SiteRoot([string]$d) {
   return (Test-Path (Join-Path $d "docker-compose.apps.yml")) `
     -or (Test-Path (Join-Path $d "docker-compose.custom.yml")) `
@@ -59,12 +64,12 @@ if (-not $NoGit) {
   $upArgs["Push"] = $true
 }
 
-Write-Host "=== 1/2 Update-HomelabUpstream (Compose, plugins, git commit/pull/merge/push) ==="
+Write-Ts "=== 1/2 Update-HomelabUpstream (Compose, plugins, git commit/pull/merge/push) ==="
 & $upd @upArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 if ($SkipDataPull) {
-  Write-Host "SkipDataPull: not running Pull-DataGit."
+  Write-Ts "SkipDataPull: not running Pull-DataGit."
   exit 0
 }
 
@@ -76,7 +81,7 @@ if (-not (Test-Path $pull)) {
   throw "Pull-DataGit.ps1 not found."
 }
 
-Write-Host "=== 2/2 Pull-DataGit (commit data, pull, merge conflicts, push) ==="
+Write-Ts "=== 2/2 Pull-DataGit (commit data, pull, merge conflicts, push) ==="
 $env:HOMELAB_SKIP_MARKET_PLUGINS = "1"
 try {
   & $pull

@@ -91,6 +91,14 @@ function Invoke-Git {
   return $output
 }
 
+function Write-Ts {
+  param([Parameter(ValueFromPipeline = $true)][object]$Line)
+  process {
+    if ($null -eq $Line) { return }
+    Write-Host ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), [string]$Line)
+  }
+}
+
 # Docker Desktop on locked/RDP/corporate Windows sessions often cannot
 # unlock the credential store. Public pulls can proceed with an empty
 # Docker config and the desktop helper removed from PATH.
@@ -125,7 +133,7 @@ function Invoke-DockerCommand {
   if (-not $script:UseAnonymousDockerConfig) {
     $output = & docker @DockerArgs 2>&1
     $code = $LASTEXITCODE
-    foreach ($line in $output) { Write-Host $line }
+    foreach ($line in $output) { Write-Ts $line }
     if ($code -eq 0) { return 0 }
     if (-not (Test-DockerCredentialHelperError $output)) { return $code }
 
@@ -140,7 +148,7 @@ function Invoke-DockerCommand {
     $env:PATH = (($previousPath -split ";" | Where-Object {
       $_ -and -not [string]::Equals($_.Trim().Trim('"').TrimEnd("\"), $dockerBin, [StringComparison]::OrdinalIgnoreCase)
     }) -join ";")
-    & $dockerPath --config $script:AnonymousDockerConfig @DockerArgs 2>&1 | ForEach-Object { Write-Host $_ }
+    & $dockerPath --config $script:AnonymousDockerConfig @DockerArgs 2>&1 | ForEach-Object { Write-Ts $_ }
     return $LASTEXITCODE
   } finally {
     $env:PATH = $previousPath
@@ -198,8 +206,8 @@ function Sync-GitIgnore {
   [System.IO.File]::WriteAllText($effectivePath, $content.TrimEnd() + "`n", [System.Text.UTF8Encoding]::new($false))
 }
 
-Write-Host ("Site root : {0}" -f $siteRoot)
-Write-Host ("Updating  : {0}" -f $upstream)
+Write-Ts ("Site root : {0}" -f $siteRoot)
+Write-Ts ("Updating  : {0}" -f $upstream)
 
 Set-Location $upstream
 Invoke-Git fetch origin | Out-Null
@@ -207,18 +215,18 @@ Invoke-Git checkout main | Out-Null
 # Prefer hard reset: upstream may be force-pushed (orphan/history rewrite).
 Invoke-Git reset --hard origin/main | Out-Null
 $rev = (Invoke-Git rev-parse --short HEAD | Select-Object -Last 1).ToString().Trim()
-Write-Host ("Upstream  : {0}" -f $rev)
+Write-Ts ("Upstream  : {0}" -f $rev)
 
 foreach ($n in @("Collect-HomelabDiag.ps1", "Collect-HomelabDiag.sh", "Dump-PkmSidebar.py")) {
   $src = Join-Path $upstream $n
   if (Test-Path -LiteralPath $src) {
     Copy-Item -LiteralPath $src -Destination (Join-Path $siteRoot $n) -Force
-    Write-Host ("Copied {0} to site root." -f $n)
+    Write-Ts ("Copied {0} to site root." -f $n)
   }
 }
 $probe = @("docker-compose.backend.yml", "Collect-HomelabDiag.ps1", "Update-HomelabUpstream.ps1")
 $probeText = ($probe | ForEach-Object { "{0}={1}" -f $_, (Test-Path -LiteralPath (Join-Path $upstream $_)) }) -join ", "
-Write-Host ("Upstream files: {0}" -f $probeText)
+Write-Ts ("Upstream files: {0}" -f $probeText)
 
 # Site-root copies can predate new product trees (scriptkit/, agent-context/, …).
 # After pull, re-enter the updater that just landed in upstream/ so those
@@ -237,7 +245,7 @@ if (-not $env:HOMELAB_UPSTREAM_REEXEC) {
       $same = $false
     }
     if (-not $same) {
-      Write-Host "Re-running updater from upstream/ so new product files are copied onto the site root."
+      Write-Ts "Re-running updater from upstream/ so new product files are copied onto the site root."
       $env:HOMELAB_UPSTREAM_REEXEC = "1"
       $reArgs = @{ Ports = $Ports }
       if ($Commit) { $reArgs["Commit"] = $true }
@@ -299,7 +307,7 @@ foreach ($name in $launcherNames) {
   }
 }
 if ($refreshed.Count -gt 0) {
-  Write-Host ("Refreshed site-root {0}" -f ($refreshed -join ", "))
+  Write-Ts ("Refreshed site-root {0}" -f ($refreshed -join ", "))
 }
 
 $productOverride = "overrides\hub-platform\sitecustomize.py"
@@ -311,13 +319,13 @@ if (Test-Path -LiteralPath $overrideSrc) {
     New-Item -ItemType Directory -Path $overrideDir -Force | Out-Null
   }
   Copy-Item -LiteralPath $overrideSrc -Destination $overrideDst -Force
-  Write-Host ("Refreshed {0}" -f $productOverride)
+  Write-Ts ("Refreshed {0}" -f $productOverride)
 }
 
 $refreshHelper = Join-Path $upstream "Refresh-SiteProductTrees.ps1"
 if (Test-Path -LiteralPath $refreshHelper) {
   & $refreshHelper -Upstream $upstream -SiteRoot $siteRoot
-  Write-Host "Copied scriptkit/, agent-context/, docker examples onto the site root."
+  Write-Ts "Copied scriptkit/, agent-context/, docker examples onto the site root."
 } else {
   Write-Warning "Refresh-SiteProductTrees.ps1 missing in upstream/; site-root scriptkit/ was not refreshed."
 }
@@ -369,9 +377,9 @@ if ($Commit) {
   $ErrorActionPreference = $prev
   if ($porcelain) {
     Invoke-Git commit -m ("Bump homelab-deploy upstream ({0})." -f $rev) | Out-Null
-    Write-Host "Committed submodule pointer."
+    Write-Ts "Committed submodule pointer."
   } else {
-    Write-Host "Upstream pointer unchanged; nothing to commit."
+    Write-Ts "Upstream pointer unchanged; nothing to commit."
   }
 }
 
@@ -395,14 +403,14 @@ if ($Push) {
     }
   }
   Invoke-Git push origin $branch | Out-Null
-  Write-Host "Pushed."
+  Write-Ts "Pushed."
 }
 
 if ($Start) {
   if (-not (Test-Path (Join-Path $siteRoot ".env"))) {
     throw "Missing .env in site root."
   }
-  Write-Host "Starting Compose (stop old containers if names conflict)..."
+  Write-Ts "Starting Compose (stop old containers if names conflict)..."
   $prev = $ErrorActionPreference
   try {
     $ErrorActionPreference = "Continue"
@@ -433,14 +441,14 @@ if ($Start) {
       $frontendComposeArgs += @("-f", "docker-compose.frontend.apps.yml")
     }
     if (Test-HttpsOverlayEnabled) {
-      Write-Host "LAN HTTPS overlay (Caddy) enabled."
+      Write-Ts "LAN HTTPS overlay (Caddy) enabled."
       $frontendComposeArgs += @("-f", "docker-compose.https.yml")
     }
     $code = Invoke-DockerCommand ($frontendComposeArgs + @("pull"))
     if ($code -ne 0) { throw "docker compose frontend pull failed" }
     $code = Invoke-DockerCommand ($frontendComposeArgs + @("up", "-d"))
     if ($code -ne 0) { throw "docker compose frontend up failed" }
-    Write-Host "Compose up done."
+    Write-Ts "Compose up done."
   } finally {
     $ErrorActionPreference = $prev
     Clear-AnonymousDockerConfig
@@ -448,9 +456,9 @@ if ($Start) {
 
   $helper = Join-Path $siteRoot "Reindex-PkmFromDisk.ps1"
   if (-not (Test-Path $helper)) {
-    Write-Host "PKM disk reindex skipped (Reindex-PkmFromDisk.ps1 not found)."
+    Write-Ts "PKM disk reindex skipped (Reindex-PkmFromDisk.ps1 not found)."
   } else {
-    Write-Host "Importing PKM pages, files, PDFs, and bookmarks from disk..."
+    Write-Ts "Importing PKM pages, files, PDFs, and bookmarks from disk..."
     $shell = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
     $ErrorActionPreference = "Continue"
     & $shell -NoProfile -ExecutionPolicy Bypass -File $helper -SkipRestart
@@ -462,17 +470,17 @@ if ($Start) {
   }
 }
 
-Write-Host "Done."
+Write-Ts "Done."
 
 $plugins = Join-Path $siteRoot "Start-MarketPlugins.ps1"
 if (Test-Path -LiteralPath $plugins) {
-  Write-Host "Starting market plugins on homelab-backend / homelab-frontend..."
+  Write-Ts "Starting market plugins on homelab-backend / homelab-frontend..."
   & $plugins -Ports $Ports
 }
 
 $waitReady = Join-Path $siteRoot "Wait-HomelabReady.ps1"
 if (Test-Path -LiteralPath $waitReady) {
-  Write-Host "Waiting until PKM API and web UI are ready..."
+  Write-Ts "Waiting until PKM API and web UI are ready..."
   & $waitReady -Ports $Ports
   if ($LASTEXITCODE -ne 0) {
     throw "Hub/PKM not ready (PKM API or nginx 502). See docker logs pkm-backend."
