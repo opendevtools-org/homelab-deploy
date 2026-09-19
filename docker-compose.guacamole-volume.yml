@@ -1,0 +1,16 @@
+# Product overlay: last -f on homelab-backend so it wins over the Market plugin compose.
+# flcontainers/guacamole keeps PostgreSQL under /config. A host bind mount on
+# Docker Desktop for Windows leaves the client stuck on "waiting for DB".
+# Applied only when data/hub/plugins/guacamole/ exists (see launcher scripts).
+
+services:
+  guacamole:
+    volumes:
+      - guacamole-config:/config
+    extra_hosts:
+      - "localhost:127.0.0.1"
+
+volumes:
+  guacamole-config:
+    name: homelab-guacamole-config
+    driver: local

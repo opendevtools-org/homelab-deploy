@@ -182,6 +182,14 @@ if ($needBackendUp) {
       "-f", "docker-compose.apps.yml"
     )
   }
+  $plugin = Join-Path $siteRoot "data\hub\plugins\guacamole\docker-compose.backend.yml"
+  if (Test-Path -LiteralPath $plugin) {
+    if (Test-Path (Join-Path $siteRoot "upstream\docker-compose.guacamole-volume.yml")) {
+      $backendArgs += @("-f", "upstream/docker-compose.guacamole-volume.yml")
+    } elseif (Test-Path (Join-Path $siteRoot "docker-compose.guacamole-volume.yml")) {
+      $backendArgs += @("-f", "docker-compose.guacamole-volume.yml")
+    }
+  }
   $code = Invoke-LoggedDocker ($backendArgs + @("up", "-d"))
   if ($code -ne 0) {
     Write-PluginLog "Could not start homelab-backend with market plugins."

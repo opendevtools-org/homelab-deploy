@@ -275,6 +275,7 @@ $launcherNames = @(
   "Refresh-SiteProductTrees.ps1",
   "Refresh-SiteProductTrees.sh",
   "docker-compose.config.yml",
+  "docker-compose.guacamole-volume.yml",
   "docker-compose.https.yml",
   "Caddyfile",
   "README.site.md"
@@ -416,6 +417,13 @@ if ($Start) {
       "-f", "docker-compose.custom.yml",
       "-f", "docker-compose.apps.yml"
     )
+    if (Test-Path (Join-Path $siteRoot "data\hub\plugins\guacamole\docker-compose.backend.yml")) {
+      if (Test-Path (Join-Path $siteRoot "upstream\docker-compose.guacamole-volume.yml")) {
+        $backendComposeArgs += @("-f", "upstream/docker-compose.guacamole-volume.yml")
+      } elseif (Test-Path (Join-Path $siteRoot "docker-compose.guacamole-volume.yml")) {
+        $backendComposeArgs += @("-f", "docker-compose.guacamole-volume.yml")
+      }
+    }
     $code = Invoke-DockerCommand ($backendComposeArgs + @("pull"))
     if ($code -ne 0) { Write-Ts "Compose pull reported errors (local build images are skipped); continuing." }
     $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d"))
