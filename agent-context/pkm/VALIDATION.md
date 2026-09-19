@@ -24,9 +24,9 @@ Compose overlay:
 docker compose --project-directory . \
   -f upstream/docker-compose.backend.yml \
   -f upstream/docker-compose.lan.yml \
-  -f docker-compose.config.yml \
   -f docker-compose.custom.yml \
   -f docker-compose.apps.yml \
+  -f docker-compose.config.yml \
   config --quiet
 ```
 

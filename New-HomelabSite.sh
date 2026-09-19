@@ -343,9 +343,9 @@ cat >"$TARGET_DIR/README.md" <<EOF
 docker compose --project-directory . \\
   -f upstream/docker-compose.backend.yml \\
   -f upstream/$PORTS_FILE \\
-  -f docker-compose.config.yml \\
   -f docker-compose.custom.yml \\
-  -f docker-compose.apps.yml up -d
+  -f docker-compose.apps.yml \\
+  -f docker-compose.config.yml up -d
 docker compose --project-directory . \\
   -f upstream/docker-compose.frontend.yml \\
   -f upstream/$FRONTEND_PORTS_FILE up -d
@@ -476,21 +476,21 @@ if [[ "$START" -eq 1 ]]; then
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
-    -f docker-compose.config.yml \
-    -f docker-compose.custom.yml \
-    -f docker-compose.apps.yml pull
-  docker compose --project-directory . \
-    -f upstream/docker-compose.backend.yml \
-    -f "upstream/$PORTS_FILE" \
-    -f docker-compose.config.yml \
-    -f docker-compose.custom.yml \
-    -f docker-compose.apps.yml up -d
-  docker compose --project-directory . \
-    -f upstream/docker-compose.backend.yml \
-    -f "upstream/$PORTS_FILE" \
-    -f docker-compose.config.yml \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
+    -f docker-compose.config.yml pull
+  docker compose --project-directory . \
+    -f upstream/docker-compose.backend.yml \
+    -f "upstream/$PORTS_FILE" \
+    -f docker-compose.custom.yml \
+    -f docker-compose.apps.yml \
+    -f docker-compose.config.yml up -d
+  docker compose --project-directory . \
+    -f upstream/docker-compose.backend.yml \
+    -f "upstream/$PORTS_FILE" \
+    -f docker-compose.custom.yml \
+    -f docker-compose.apps.yml \
+    -f docker-compose.config.yml \
     rm --force >/dev/null 2>&1 || true
   ids="$(docker ps -aq --filter label=homelab.config-job=true --filter status=exited 2>/dev/null || true)"
   if [[ -n "$ids" ]]; then
@@ -520,5 +520,5 @@ fi
 echo
 echo "Done. Flat install converted in place:"
 echo "  $TARGET_DIR"
-echo "  Backend:  docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/$PORTS_FILE -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml up -d"
+echo "  Backend:  docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/$PORTS_FILE -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml up -d"
 echo "  Frontend: docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/$FRONTEND_PORTS_FILE up -d"

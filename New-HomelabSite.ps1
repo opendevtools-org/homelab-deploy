@@ -576,9 +576,9 @@ Converted from a flat ``homelab-deploy`` install.
 docker compose --project-directory . \\
   -f upstream/docker-compose.backend.yml \\
   -f upstream/$portsFile \\
-  -f docker-compose.config.yml \\
   -f docker-compose.custom.yml \\
-  -f docker-compose.apps.yml up -d
+  -f docker-compose.apps.yml \\
+  -f docker-compose.config.yml up -d
 docker compose --project-directory . \\
   -f upstream/docker-compose.frontend.yml \\
   -f upstream/$frontendPortsFile up -d
@@ -759,9 +759,9 @@ if ($Start) {
       "compose", "--project-directory", ".",
       "-f", "upstream/docker-compose.backend.yml",
       "-f", ("upstream/{0}" -f $portsFile),
-      "-f", "docker-compose.config.yml",
       "-f", "docker-compose.custom.yml",
-      "-f", "docker-compose.apps.yml"
+      "-f", "docker-compose.apps.yml",
+      "-f", "docker-compose.config.yml"
     )
     $code = Invoke-DockerCommand ($backendComposeArgs + @("pull"))
     if ($code -ne 0) { throw "docker compose pull failed" }
@@ -794,5 +794,5 @@ Write-Host "Done. Flat install converted in place:"
 Write-Host ("  {0}" -f $TargetDir)
 Write-Host "  upstream/  = product submodule (git pull inside to update)"
 Write-Host "  data/      = your volumes"
-Write-Host ("  Backend   : docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/{0} -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml up -d" -f $portsFile)
+Write-Host ("  Backend   : docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/{0} -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml up -d" -f $portsFile)
 Write-Host ("  Frontend  : docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/{0} up -d" -f $frontendPortsFile)

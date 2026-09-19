@@ -2,14 +2,14 @@
 
 Two different `cli/` uses:
 
-1. **Deploy CLIs** (`cli/lib`, `cli/homelab`, `cli/custom`) — see [../cli/README.md](../cli/README.md).
+1. **Deploy CLIs** (`cli/lib`, `cli/homelab`; site tools only in `cli/custom/`) — see [../cli/README.md](../cli/README.md).
 2. **PKM portal tools** (below) — form JSON on stdin, `odt_scripts` launcher.
 
 ## PKM portal tools
 
 | Path | Role | On product update |
 |------|------|-------------------|
-| `cli/<name>/src/` | Real CLI (`argparse` commands) for a PKM script | kept (site) |
+| `cli/custom/<name>/src/` | Real CLI (`argparse` commands) for a PKM script | kept (site) |
 | `data/pkm/scripts/<name>/` | PKM launcher + `manifest.json` | kept (site data) |
 | `scriptkit/odt_scripts/` | Shared library | refreshed onto the **site root** |
 
@@ -29,7 +29,7 @@ Use the product helper:
 
 ```python
 from odt_scripts.launcher import run_cli_from_stdin
-raise SystemExit(run_cli_from_stdin(["python", "/app/cli/mytool/src/main.py", "run"]))
+raise SystemExit(run_cli_from_stdin(["python", "/app/cli/custom/mytool/src/main.py", "run"]))
 ```
 
 `manifest.json` `parameters` need `name`, `type`, `label`, `required`. Parameter
@@ -45,7 +45,7 @@ Mounts (from `docker-compose.custom.example.yml`):
 - `./scriptkit:/app/scriptkit:ro` — library
 - `PYTHONPATH=/app/scriptkit:/overrides`
 
-Copy `scriptkit/examples/echo_cli/` into `cli/<name>/` and
+Copy `scriptkit/examples/echo_cli/` into `cli/custom/<name>/` and
 `data/pkm/scripts/<name>/` when adding a tool. Extra OS packages (Java, Maven)
 go in `docker/pkm-backend/Dockerfile`, not in the library.
 

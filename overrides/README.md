@@ -17,7 +17,7 @@ Empty folders are required so Compose bind-mounts succeed. Recreate after adding
 
 ```bash
 docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml \
-  -f docker-compose.config.yml -f docker-compose.custom.yml \
-  -f docker-compose.apps.yml up -d
+  -f docker-compose.custom.yml -f docker-compose.apps.yml \
+  -f docker-compose.config.yml up -d
 docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
 ```

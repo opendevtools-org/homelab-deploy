@@ -81,31 +81,27 @@ function Invoke-BackendComposeUp {
   param([string]$Reason)
   Write-Ts $Reason
   $backendArgs = @("compose", "--project-directory", $siteRoot)
+  $plugin = Join-Path $siteRoot "data\hub\plugins\guacamole\docker-compose.backend.yml"
+  if (Test-Path -LiteralPath $plugin) {
+    $backendArgs += @("--profile", "guacamole")
+  }
   $upstreamBe = Join-Path $siteRoot "upstream\docker-compose.backend.yml"
   if (Test-Path $upstreamBe) {
     $backendArgs += @(
       "-f", "upstream/docker-compose.backend.yml",
       "-f", ("upstream/{0}" -f $portsFile),
-      "-f", "docker-compose.config.yml",
       "-f", "docker-compose.custom.yml",
-      "-f", "docker-compose.apps.yml"
+      "-f", "docker-compose.apps.yml",
+      "-f", "docker-compose.config.yml"
     )
   } else {
     $backendArgs += @(
       "-f", "docker-compose.backend.yml",
       "-f", $portsFile,
-      "-f", "docker-compose.config.yml",
       "-f", "docker-compose.custom.yml",
-      "-f", "docker-compose.apps.yml"
+      "-f", "docker-compose.apps.yml",
+      "-f", "docker-compose.config.yml"
     )
-  }
-  $plugin = Join-Path $siteRoot "data\hub\plugins\guacamole\docker-compose.backend.yml"
-  if (Test-Path -LiteralPath $plugin) {
-    if (Test-Path (Join-Path $siteRoot "upstream\docker-compose.guacamole-volume.yml")) {
-      $backendArgs += @("-f", "upstream/docker-compose.guacamole-volume.yml")
-    } elseif (Test-Path (Join-Path $siteRoot "docker-compose.guacamole-volume.yml")) {
-      $backendArgs += @("-f", "docker-compose.guacamole-volume.yml")
-    }
   }
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"

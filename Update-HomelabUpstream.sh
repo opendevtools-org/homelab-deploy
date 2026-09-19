@@ -265,35 +265,28 @@ if [[ "$START" -eq 1 ]]; then
   fi
   log "Starting Compose..."
   export BUILDKIT_PROGRESS=quiet
-  guac_vol=()
+  guac_profile=()
   if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
-    if [[ -f upstream/docker-compose.guacamole-volume.yml ]]; then
-      guac_vol+=(-f upstream/docker-compose.guacamole-volume.yml)
-    elif [[ -f docker-compose.guacamole-volume.yml ]]; then
-      guac_vol+=(-f docker-compose.guacamole-volume.yml)
-    fi
+    guac_profile+=(--profile guacamole)
   fi
-  docker compose --project-directory . \
+  docker compose --project-directory . "${guac_profile[@]}" \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
-    -f docker-compose.config.yml \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
-    "${guac_vol[@]}" pull || log "Compose pull reported errors (local build images are skipped); continuing."
-  docker compose --project-directory . \
+    -f docker-compose.config.yml pull || log "Compose pull reported errors (local build images are skipped); continuing."
+  docker compose --project-directory . "${guac_profile[@]}" \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
-    -f docker-compose.config.yml \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
-    "${guac_vol[@]}" up -d
-  docker compose --project-directory . \
+    -f docker-compose.config.yml up -d
+  docker compose --project-directory . "${guac_profile[@]}" \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
-    -f docker-compose.config.yml \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
-    "${guac_vol[@]}" \
+    -f docker-compose.config.yml \
     rm --force >/dev/null 2>&1 || true
   ids="$(docker ps -aq --filter label=homelab.config-job=true --filter status=exited 2>/dev/null || true)"
   if [[ -n "$ids" ]]; then

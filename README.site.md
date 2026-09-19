@@ -17,9 +17,9 @@ are product code.
 docker compose --project-directory . \
   -f upstream/docker-compose.backend.yml \
   -f upstream/docker-compose.lan.yml \
-  -f docker-compose.config.yml \
   -f docker-compose.custom.yml \
-  -f docker-compose.apps.yml up -d
+  -f docker-compose.apps.yml \
+  -f docker-compose.config.yml up -d
 ```
 
 Localhost: use `upstream/docker-compose.local.yml` instead of `lan`.
@@ -30,9 +30,9 @@ Remove the one-shot init container (PKM data is kept):
 docker compose --project-directory . \
   -f upstream/docker-compose.backend.yml \
   -f upstream/docker-compose.lan.yml \
-  -f docker-compose.config.yml \
   -f docker-compose.custom.yml \
   -f docker-compose.apps.yml \
+  -f docker-compose.config.yml \
   rm --force --stop pkm-data-permissions site-cli-volumes-permissions
 ```
 

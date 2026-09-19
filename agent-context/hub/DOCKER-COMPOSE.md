@@ -5,7 +5,7 @@ the submodule. Site extras:
 
 | File | Role | On product update |
 |------|------|-------------------|
-| `docker-compose.config.yml` | one-shot chown (`data/pkm` + CLI volumes) | refreshed |
+| `docker-compose.config.yml` | last `-f`: chown jobs + Guacamole volume/SSO | refreshed |
 | `docker-compose.custom.yml` | Hub/PKM image + `cli/` / `scriptkit/` mounts | kept |
 | `docker-compose.apps.yml` | extra apps / Market plugins (Guacamole lands here on first start) | kept |
 
@@ -24,9 +24,9 @@ not runnable alone. Do not redefine Hub/PKM **images** in `apps.yml`.
 docker compose --project-directory . \
   -f upstream/docker-compose.backend.yml \
   -f upstream/docker-compose.lan.yml \
-  -f docker-compose.config.yml \
   -f docker-compose.custom.yml \
   -f docker-compose.apps.yml \
+  -f docker-compose.config.yml \
   up -d
 ```
 

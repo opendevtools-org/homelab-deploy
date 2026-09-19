@@ -11,7 +11,7 @@ Needs Docker Compose v2 and access to `ghcr.io`.
 | `homelab-backend` | `docker-compose.backend.yml` | server | Hub Platform API + PKM API |
 | | `docker-compose.yml` | server | alias of `docker-compose.backend.yml` |
 | | `docker-compose.lan.yml` or `.local.yml` | server | API host ports (pick one) |
-| | `docker-compose.config.yml` | server | one-shot ownership (`data/pkm` + CLI named volumes) |
+| | `docker-compose.config.yml` | server | last `-f`: ownership jobs + Guacamole named volume/SSO (profile `guacamole`) |
 | | `docker-compose.custom.yml` | server | optional Hub/PKM image + `cli/` mounts |
 | | `docker-compose.apps.yml` | server | extra **backends** (Market plugins; Guacamole is installed here on first start) |
 | `homelab-frontend` | `docker-compose.frontend.yml` | same host as APIs | Hub UI + PKM UI (joins `homelab_default`) |
@@ -30,9 +30,11 @@ cd homelab-deploy
 cp .env.example .env   # Windows: copy .env.example .env
 # fill secrets in .env
 
-docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml pull
-docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml up -d
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml pull
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml up -d
 ```
+
+`docker-compose.config.yml` is last so Guacamole uses a named volume (not a Windows bind of `/config`). With the Guacamole Market plugin installed, add `--profile guacamole` (the Update/Run scripts do this).
 
 Localhost: swap `lan` for `local`. Do not combine both. `docker-compose.yml` is an alias of `docker-compose.backend.yml`.
 
@@ -160,8 +162,8 @@ Upgrade (flat, server):
 
 ```bash
 git pull
-docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml pull
-docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.config.yml -f docker-compose.custom.yml -f docker-compose.apps.yml up -d
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml pull
+docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml up -d
 docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml pull
 docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.lan.yml up -d
 # If HUB_HOSTNAME and PKM_HOSTNAME are set, also add -f docker-compose.https.yml
@@ -239,9 +241,9 @@ Start:
 docker compose --project-directory . \
   -f upstream/docker-compose.backend.yml \
   -f upstream/docker-compose.lan.yml \
-  -f docker-compose.config.yml \
   -f docker-compose.custom.yml \
-  -f docker-compose.apps.yml up -d
+  -f docker-compose.apps.yml \
+  -f docker-compose.config.yml up -d
 docker compose --project-directory . \
   -f upstream/docker-compose.frontend.yml \
   -f upstream/docker-compose.frontend.lan.yml up -d

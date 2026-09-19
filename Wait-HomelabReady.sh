@@ -35,30 +35,24 @@ start_named() {
 backend_up() {
   local why="$1"
   log "$why"
-  local guac_vol=()
+  local guac_profile=()
   if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
-    if [[ -f upstream/docker-compose.guacamole-volume.yml ]]; then
-      guac_vol+=(-f upstream/docker-compose.guacamole-volume.yml)
-    elif [[ -f docker-compose.guacamole-volume.yml ]]; then
-      guac_vol+=(-f docker-compose.guacamole-volume.yml)
-    fi
+    guac_profile+=(--profile guacamole)
   fi
   if [[ -f upstream/docker-compose.backend.yml ]]; then
-    docker compose --project-directory . \
+    docker compose --project-directory . "${guac_profile[@]}" \
       -f upstream/docker-compose.backend.yml \
       -f "upstream/$PORTS_FILE" \
-      -f docker-compose.config.yml \
       -f docker-compose.custom.yml \
       -f docker-compose.apps.yml \
-      "${guac_vol[@]}" up -d || true
+      -f docker-compose.config.yml up -d || true
   else
-    docker compose \
+    docker compose "${guac_profile[@]}" \
       -f docker-compose.backend.yml \
       -f "$PORTS_FILE" \
-      -f docker-compose.config.yml \
       -f docker-compose.custom.yml \
       -f docker-compose.apps.yml \
-      "${guac_vol[@]}" up -d || true
+      -f docker-compose.config.yml up -d || true
   fi
 }
 

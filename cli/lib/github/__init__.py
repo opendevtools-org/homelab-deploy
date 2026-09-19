@@ -1,4 +1,5 @@
 from .api import (
+    api_headers,
     api_url,
     create_branch_from_tag,
     github_request,
@@ -8,6 +9,7 @@ from .api import (
 )
 
 __all__ = [
+    "api_headers",
     "api_url",
     "create_branch_from_tag",
     "github_request",

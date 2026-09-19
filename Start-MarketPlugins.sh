@@ -144,26 +144,27 @@ fi
 
 if [[ "$need_be" -eq 1 ]]; then
   if [[ -f upstream/docker-compose.backend.yml ]]; then
-    be=(docker compose --project-directory .
+    be=(docker compose --project-directory .)
+    if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
+      be+=(--profile guacamole)
+    fi
+    be+=(
       -f upstream/docker-compose.backend.yml
       -f "upstream/$PORTS_FILE"
-      -f docker-compose.config.yml
       -f docker-compose.custom.yml
-      -f docker-compose.apps.yml)
+      -f docker-compose.apps.yml
+      -f docker-compose.config.yml)
   else
-    be=(docker compose
+    be=(docker compose)
+    if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
+      be+=(--profile guacamole)
+    fi
+    be+=(
       -f docker-compose.backend.yml
       -f "$PORTS_FILE"
-      -f docker-compose.config.yml
       -f docker-compose.custom.yml
-      -f docker-compose.apps.yml)
-  fi
-  if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
-    if [[ -f upstream/docker-compose.guacamole-volume.yml ]]; then
-      be+=(-f upstream/docker-compose.guacamole-volume.yml)
-    elif [[ -f docker-compose.guacamole-volume.yml ]]; then
-      be+=(-f docker-compose.guacamole-volume.yml)
-    fi
+      -f docker-compose.apps.yml
+      -f docker-compose.config.yml)
   fi
   if ! run_logged "${be[@]}" up -d; then
     log "Could not start homelab-backend with market plugins."

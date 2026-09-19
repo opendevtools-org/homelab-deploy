@@ -1,25 +1,26 @@
-# One-time initialization overlay (data + named-volume ownership).
-# Include after the base compose and network overlay, before
-# docker-compose.custom.yml and docker-compose.apps.yml.
+# One-time initialization overlay (data + named-volume ownership) and
+# Guacamole named volume + Hub SSO env.
+#
+# Last -f on the backend project so it wins over Market plugin bind mounts
+# (Windows bind of /config leaves flcontainers/guacamole on "waiting for DB").
+# Guacamole uses Compose profile `guacamole`: launchers pass
+# `--profile guacamole` only when the Market plugin is installed. Without
+# that flag this file does not start a Guacamole container.
 #
 # After `up`, launchers run `docker compose rm --force` (no --stop, no
 # service names) so only already-exited one-shots are removed. --stop
 # would halt pkm-backend and hub-platform too.
 #
-# Guacamole Postgres/SSO is docker-compose.guacamole-volume.yml (last -f),
-# only if the Market plugin is installed. Do not merge that service into
-# this file: Compose would create Guacamole even when the plugin is absent.
-#
 # Include with the backend project only (not with docker-compose.frontend.yml).
 # Flat:
 #   docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml \
-#     -f docker-compose.config.yml -f docker-compose.custom.yml \
-#     -f docker-compose.apps.yml up -d
+#     -f docker-compose.custom.yml -f docker-compose.apps.yml \
+#     -f docker-compose.config.yml up -d
 # Site:
 #   docker compose --project-directory . \
 #     -f upstream/docker-compose.backend.yml -f upstream/docker-compose.lan.yml \
-#     -f docker-compose.config.yml -f docker-compose.custom.yml \
-#     -f docker-compose.apps.yml up -d
+#     -f docker-compose.custom.yml -f docker-compose.apps.yml \
+#     -f docker-compose.config.yml up -d
 
 services:
   pkm-data-permissions:
@@ -102,6 +103,21 @@ services:
       site-cli-volumes-permissions:
         condition: service_completed_successfully
 
+  guacamole:
+    profiles: [guacamole]
+    pull_policy: missing
+    environment:
+      EXTENSIONS: auth-header
+      HTTP_AUTH_HEADER: REMOTE_USER
+      POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true"
+    volumes:
+      - guacamole-config:/config
+    extra_hosts:
+      - "localhost:127.0.0.1"
+
 volumes:
   site-cli-cache:
   site-cli-home:
+  guacamole-config:
+    name: homelab-guacamole-config
+    driver: local
