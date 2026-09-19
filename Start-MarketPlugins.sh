@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Attach Market plugins to homelab-backend / homelab-frontend (not a separate Compose project).
+# Logs console + docker output to logs/start-market-plugins.log (or HOMELAB_START_PLUGINS_LOG).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -7,9 +8,32 @@ SITE_ROOT="$HERE"
 if [[ "$(basename "$HERE")" == "upstream" && -d "$HERE/../data" ]]; then
   SITE_ROOT="$(cd "$HERE/.." && pwd)"
 fi
+
+LOG="${HOMELAB_START_PLUGINS_LOG:-$SITE_ROOT/logs/start-market-plugins.log}"
+mkdir -p "$(dirname "$LOG")"
+
+log() {
+  local line
+  line="[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+  printf '%s\n' "$line"
+  printf '%s\n' "$line" >>"$LOG"
+}
+
+run_logged() {
+  log "$*"
+  set +e
+  "$@" 2>&1 | while IFS= read -r row || [[ -n "$row" ]]; do
+    log "$row"
+  done
+  local code="${PIPESTATUS[0]}"
+  set -e
+  return "$code"
+}
+
 ROOT="$SITE_ROOT/data/hub/plugins"
-[[ -d "$ROOT" ]] || exit 0
-command -v docker >/dev/null 2>&1 || exit 0
+log "Start-MarketPlugins Ports=${HOMELAB_PORTS:-lan} LogFile=${LOG}"
+[[ -d "$ROOT" ]] || { log "No data/hub/plugins directory; nothing to start."; exit 0; }
+command -v docker >/dev/null 2>&1 || { log "docker not found; skip."; exit 0; }
 
 PORTS="${HOMELAB_PORTS:-lan}"
 if [[ "$PORTS" == "local" ]]; then
@@ -41,6 +65,7 @@ include:
 
 services: {}
 EOF
+    log "Created ${overlay}"
     return
   fi
   grep -Fq "$compose_rel" "$overlay" && return 0
@@ -59,6 +84,7 @@ EOF
     printf 'include:\n%s\n%s\n' "$item" "$(cat "$overlay")" >"${overlay}.tmp"
     mv "${overlay}.tmp" "$overlay"
   fi
+  log "Updated include in ${overlay}: ${compose_rel}"
 }
 
 APPS="$SITE_ROOT/docker-compose.apps.yml"
@@ -71,7 +97,7 @@ for dir in "$ROOT"/*/; do
   [[ -d "$dir" ]] || continue
   id="$(basename "$dir")"
   [[ "$id" =~ ^[a-z0-9][a-z0-9_-]*$ ]] || continue
-  docker compose --project-name "homelab-plugin-${id}" down >/dev/null 2>&1 || true
+  run_logged docker compose --project-name "homelab-plugin-${id}" down || true
 
   backend=""
   for f in docker-compose.backend.yml docker-compose.yml; do
@@ -84,12 +110,12 @@ for dir in "$ROOT"/*/; do
   if [[ -n "$backend" ]]; then
     add_include "$APPS" "$backend" "${dir%/}"
     want_be=1
-    echo "Plugin ${id}: backend attached to homelab-backend."
+    log "Plugin ${id}: backend attached to homelab-backend."
   fi
   if [[ -f "$frontend" ]]; then
     add_include "$FE_APPS" "$frontend" "${dir%/}"
     want_fe=1
-    echo "Plugin ${id}: frontend attached to homelab-frontend."
+    log "Plugin ${id}: frontend attached to homelab-frontend."
   fi
 done
 
@@ -111,12 +137,15 @@ if [[ "$want_be" -eq 1 ]]; then
       -f docker-compose.custom.yml
       -f docker-compose.apps.yml)
   fi
-  "${be[@]}" up -d
-  "${be[@]}" rm --force --stop >/dev/null 2>&1 || true
-  ids="$(docker ps -aq --filter label=homelab.config-job=true --filter status=exited 2>/dev/null || true)"
-  if [[ -n "$ids" ]]; then
-    # shellcheck disable=SC2086
-    docker rm -f $ids >/dev/null 2>&1 || true
+  if ! run_logged "${be[@]}" up -d; then
+    log "Could not start homelab-backend with market plugins."
+  else
+    run_logged "${be[@]}" rm --force --stop || true
+    ids="$(docker ps -aq --filter label=homelab.config-job=true --filter status=exited 2>/dev/null || true)"
+    if [[ -n "$ids" ]]; then
+      # shellcheck disable=SC2086
+      run_logged docker rm -f $ids || true
+    fi
   fi
 fi
 
@@ -131,5 +160,9 @@ if [[ "$want_fe" -eq 1 ]]; then
   if [[ -f "$FE_APPS" ]]; then
     args+=(-f docker-compose.frontend.apps.yml)
   fi
-  "${args[@]}" up -d
+  if ! run_logged "${args[@]}" up -d; then
+    log "Could not start homelab-frontend with market plugins."
+  fi
 fi
+
+log "Start-MarketPlugins finished."
