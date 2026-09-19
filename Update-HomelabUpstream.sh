@@ -262,6 +262,12 @@ fi
 
 if [[ "$START" -eq 1 ]]; then
   [[ -f .env ]] || { log "Missing .env in site root" >&2; exit 1; }
+  plugins="$SITE_ROOT/Start-MarketPlugins.sh"
+  if [[ -f "$plugins" ]]; then
+    log "Attaching market plugin compose includes..."
+    chmod +x "$plugins" 2>/dev/null || true
+    HOMELAB_SKIP_MARKET_COMPOSE=1 HOMELAB_PORTS="$PORTS" /bin/bash "$plugins" || log "Start-MarketPlugins did not fully succeed." >&2
+  fi
   log "Starting Compose (stop old containers if names conflict)..."
   for n in pkm-backend pkm-frontend home-hub home-hub-platform pkm-https; do
     docker rm -f "$n" >/dev/null 2>&1 || true
@@ -277,7 +283,7 @@ if [[ "$START" -eq 1 ]]; then
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
     -f docker-compose.custom.yml \
-    -f docker-compose.apps.yml up -d --force-recreate
+    -f docker-compose.apps.yml up -d
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
@@ -334,11 +340,13 @@ if [[ "$START" -eq 1 ]]; then
   fi
 fi
 
-plugins="$SITE_ROOT/Start-MarketPlugins.sh"
-if [[ -f "$plugins" ]]; then
-  log "Starting market plugins on homelab-backend / homelab-frontend..."
-  chmod +x "$plugins" 2>/dev/null || true
-  HOMELAB_PORTS="$PORTS" /bin/bash "$plugins" || log "Start-MarketPlugins did not fully succeed." >&2
+if [[ "$START" -ne 1 ]]; then
+  plugins="$SITE_ROOT/Start-MarketPlugins.sh"
+  if [[ -f "$plugins" ]]; then
+    log "Starting market plugins on homelab-backend / homelab-frontend..."
+    chmod +x "$plugins" 2>/dev/null || true
+    HOMELAB_PORTS="$PORTS" /bin/bash "$plugins" || log "Start-MarketPlugins did not fully succeed." >&2
+  fi
 fi
 
 wait_ready="$SITE_ROOT/Wait-HomelabReady.sh"

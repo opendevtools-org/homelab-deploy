@@ -27,10 +27,8 @@
   git push after integrating origin (rebase, then merge fallback). Implies commit.
 
 .PARAMETER Start
-  docker compose pull && up -d after updating the submodule, then import
-  PKM pages/files/PDFs/bookmarks from disk without restarting PKM again.
-  Always runs Start-MarketPlugins afterwards, then Wait-HomelabReady
-  (PKM API healthy and nginx can proxy — no leftover 502).
+  Attaches market plugin includes, then docker compose pull && up -d
+  (without force-recreate), then import PKM from disk, then Wait-HomelabReady.
 
 .EXAMPLE
   cd C:\Projects\homelab-deploy
@@ -410,6 +408,16 @@ if ($Start) {
   if (-not (Test-Path (Join-Path $siteRoot ".env"))) {
     throw "Missing .env in site root."
   }
+  $plugins = Join-Path $siteRoot "Start-MarketPlugins.ps1"
+  if (Test-Path -LiteralPath $plugins) {
+    Write-Ts "Attaching market plugin compose includes..."
+    $env:HOMELAB_SKIP_MARKET_COMPOSE = "1"
+    try {
+      & $plugins -Ports $Ports
+    } finally {
+      Remove-Item Env:HOMELAB_SKIP_MARKET_COMPOSE -ErrorAction SilentlyContinue
+    }
+  }
   Write-Ts "Starting Compose (stop old containers if names conflict)..."
   $prev = $ErrorActionPreference
   try {
@@ -427,7 +435,7 @@ if ($Start) {
     )
     $code = Invoke-DockerCommand ($backendComposeArgs + @("pull"))
     if ($code -ne 0) { throw "docker compose pull failed" }
-    $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d", "--force-recreate"))
+    $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d"))
     if ($code -ne 0) { throw "docker compose up failed" }
     $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force"))
     $gone = & docker ps -aq --filter "label=homelab.config-job=true" --filter "status=exited" 2>$null
@@ -472,10 +480,12 @@ if ($Start) {
 
 Write-Ts "Done."
 
-$plugins = Join-Path $siteRoot "Start-MarketPlugins.ps1"
-if (Test-Path -LiteralPath $plugins) {
-  Write-Ts "Starting market plugins on homelab-backend / homelab-frontend..."
-  & $plugins -Ports $Ports
+if (-not $Start) {
+  $plugins = Join-Path $siteRoot "Start-MarketPlugins.ps1"
+  if (Test-Path -LiteralPath $plugins) {
+    Write-Ts "Starting market plugins on homelab-backend / homelab-frontend..."
+    & $plugins -Ports $Ports
+  }
 }
 
 $waitReady = Join-Path $siteRoot "Wait-HomelabReady.ps1"

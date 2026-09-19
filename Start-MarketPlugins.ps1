@@ -96,10 +96,10 @@ services: {}
 "@
     [IO.File]::WriteAllText($OverlayPath, $seed.Replace("`n", "`n"))
     Write-PluginLog ("Created {0}" -f $OverlayPath)
-    return
+    return $true
   }
   $text = [IO.File]::ReadAllText($OverlayPath)
-  if ($text.Contains($composeRel)) { return }
+  if ($text.Contains($composeRel)) { return $false }
   $item = "  - path: $composeRel`n    project_directory: $projectRel`n"
   if ($text -match '(?m)^include:\s*\r?\n') {
     $text = [regex]::Replace($text, '(?m)^include:\s*\r?\n', "include:`n$item", 1)
@@ -108,12 +108,16 @@ services: {}
   }
   [IO.File]::WriteAllText($OverlayPath, $text)
   Write-PluginLog ("Updated include in {0}: {1}" -f $OverlayPath, $composeRel)
+  return $true
 }
 
 $appsOverlay = Join-Path $siteRoot "docker-compose.apps.yml"
 $feAppsOverlay = Join-Path $siteRoot "docker-compose.frontend.apps.yml"
 $wantBackend = $false
 $wantFrontend = $false
+$backendDirty = $false
+$frontendDirty = $false
+$skipCompose = $env:HOMELAB_SKIP_MARKET_COMPOSE -eq "1"
 
 Get-ChildItem -Directory $root | ForEach-Object {
   $id = $_.Name
@@ -128,20 +132,37 @@ Get-ChildItem -Directory $root | ForEach-Object {
   }
   $frontend = Join-Path $_.FullName "docker-compose.frontend.yml"
   if ($backend) {
-    Add-ComposeInclude -OverlayPath $appsOverlay -ComposeFile $backend -ProjectDir $_.FullName
-    $wantBackend = $true
+    if (Add-ComposeInclude -OverlayPath $appsOverlay -ComposeFile $backend -ProjectDir $_.FullName) {
+      $script:backendDirty = $true
+    }
+    $script:wantBackend = $true
     Write-PluginLog ("Plugin {0}: backend attached to homelab-backend." -f $id)
   }
   if (Test-Path -LiteralPath $frontend) {
-    Add-ComposeInclude -OverlayPath $feAppsOverlay -ComposeFile $frontend -ProjectDir $_.FullName
-    $wantFrontend = $true
+    if (Add-ComposeInclude -OverlayPath $feAppsOverlay -ComposeFile $frontend -ProjectDir $_.FullName) {
+      $script:frontendDirty = $true
+    }
+    $script:wantFrontend = $true
     Write-PluginLog ("Plugin {0}: frontend attached to homelab-frontend." -f $id)
   }
 }
 
 Set-Location $siteRoot
 
-if ($wantBackend) {
+function Test-NamedRunning([string]$Name) {
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $state = & docker inspect -f "{{.State.Running}}" $Name 2>$null
+  $ErrorActionPreference = $prev
+  return $state -eq "true"
+}
+
+$needBackendUp = $false
+if ($wantBackend -and -not $skipCompose) {
+  $needBackendUp = $backendDirty -or -not (Test-NamedRunning "homelab-guacamole")
+}
+
+if ($needBackendUp) {
   $backendArgs = @("compose", "--project-directory", $siteRoot)
   $upstreamBe = Join-Path $siteRoot "upstream\docker-compose.backend.yml"
   if (Test-Path $upstreamBe) {
@@ -173,7 +194,20 @@ if ($wantBackend) {
   }
 }
 
-# Always refresh Hub/PKM nginx, even when plugins have no frontend compose.
+$needFrontendUp = $false
+if (-not $skipCompose) {
+  $needFrontendUp = $frontendDirty -or -not (Test-NamedRunning "home-hub")
+}
+if (-not $needFrontendUp) {
+  if ($skipCompose) {
+    Write-PluginLog "Skip plugin Compose up (includes already applied; stack starts next)."
+  } else {
+    Write-PluginLog "Plugin includes unchanged; skip extra Compose up."
+  }
+  Write-PluginLog "Start-MarketPlugins finished."
+  return
+}
+
 $frontendArgs = @("compose", "--project-directory", $siteRoot)
 $upstreamFe = Join-Path $siteRoot "upstream\docker-compose.frontend.yml"
 if (Test-Path $upstreamFe) {

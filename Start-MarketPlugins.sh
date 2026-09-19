@@ -66,7 +66,8 @@ include:
 services: {}
 EOF
     log "Created ${overlay}"
-    return
+    INCLUDE_CHANGED=1
+    return 0
   fi
   grep -Fq "$compose_rel" "$overlay" && return 0
   local item
@@ -85,12 +86,17 @@ EOF
     mv "${overlay}.tmp" "$overlay"
   fi
   log "Updated include in ${overlay}: ${compose_rel}"
+  INCLUDE_CHANGED=1
 }
 
 APPS="$SITE_ROOT/docker-compose.apps.yml"
 FE_APPS="$SITE_ROOT/docker-compose.frontend.apps.yml"
 want_be=0
 want_fe=0
+be_dirty=0
+fe_dirty=0
+skip_compose=0
+[[ "${HOMELAB_SKIP_MARKET_COMPOSE:-}" == "1" ]] && skip_compose=1
 
 shopt -s nullglob
 for dir in "$ROOT"/*/; do
@@ -108,12 +114,16 @@ for dir in "$ROOT"/*/; do
   done
   frontend="${dir}docker-compose.frontend.yml"
   if [[ -n "$backend" ]]; then
+    INCLUDE_CHANGED=0
     add_include "$APPS" "$backend" "${dir%/}"
+    [[ "$INCLUDE_CHANGED" -eq 1 ]] && be_dirty=1
     want_be=1
     log "Plugin ${id}: backend attached to homelab-backend."
   fi
   if [[ -f "$frontend" ]]; then
+    INCLUDE_CHANGED=0
     add_include "$FE_APPS" "$frontend" "${dir%/}"
+    [[ "$INCLUDE_CHANGED" -eq 1 ]] && fe_dirty=1
     want_fe=1
     log "Plugin ${id}: frontend attached to homelab-frontend."
   fi
@@ -121,7 +131,18 @@ done
 
 cd "$SITE_ROOT"
 
-if [[ "$want_be" -eq 1 ]]; then
+named_running() {
+  [[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" == "true" ]]
+}
+
+need_be=0
+if [[ "$want_be" -eq 1 && "$skip_compose" -eq 0 ]]; then
+  if [[ "$be_dirty" -eq 1 ]] || ! named_running homelab-guacamole; then
+    need_be=1
+  fi
+fi
+
+if [[ "$need_be" -eq 1 ]]; then
   if [[ -f upstream/docker-compose.backend.yml ]]; then
     be=(docker compose --project-directory .
       -f upstream/docker-compose.backend.yml
@@ -147,6 +168,22 @@ if [[ "$want_be" -eq 1 ]]; then
       run_logged docker rm -f $ids || true
     fi
   fi
+fi
+
+need_fe=0
+if [[ "$skip_compose" -eq 0 ]]; then
+  if [[ "$fe_dirty" -eq 1 ]] || ! named_running home-hub; then
+    need_fe=1
+  fi
+fi
+if [[ "$need_fe" -eq 0 ]]; then
+  if [[ "$skip_compose" -eq 1 ]]; then
+    log "Skip plugin Compose up (includes already applied; stack starts next)."
+  else
+    log "Plugin includes unchanged; skip extra Compose up."
+  fi
+  log "Start-MarketPlugins finished."
+  exit 0
 fi
 
 if [[ -f upstream/docker-compose.frontend.yml ]]; then
