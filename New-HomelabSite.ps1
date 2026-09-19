@@ -764,6 +764,8 @@ if ($Start) {
     $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d"))
     if ($code -ne 0) { throw "docker compose up failed" }
     $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force", "--stop", "pkm-data-permissions", "site-cli-volumes-permissions"))
+    $gone = & docker ps -aq --filter "label=homelab.config-job=true" --filter "status=exited" 2>$null
+    if ($gone) { $null = & docker rm -f @gone 2>$null }
     $frontendComposeArgs = @(
       "compose", "--project-directory", ".",
       "-f", "upstream/docker-compose.frontend.yml",

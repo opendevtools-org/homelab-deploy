@@ -97,19 +97,26 @@ cd "$SITE_ROOT"
 
 if [[ "$want_be" -eq 1 ]]; then
   if [[ -f upstream/docker-compose.backend.yml ]]; then
-    docker compose --project-directory . \
-      -f upstream/docker-compose.backend.yml \
-      -f "upstream/$PORTS_FILE" \
-      -f docker-compose.config.yml \
-      -f docker-compose.custom.yml \
-      -f docker-compose.apps.yml up -d
+    be=(docker compose --project-directory .
+      -f upstream/docker-compose.backend.yml
+      -f "upstream/$PORTS_FILE"
+      -f docker-compose.config.yml
+      -f docker-compose.custom.yml
+      -f docker-compose.apps.yml)
   else
-    docker compose \
-      -f docker-compose.backend.yml \
-      -f "$PORTS_FILE" \
-      -f docker-compose.config.yml \
-      -f docker-compose.custom.yml \
-      -f docker-compose.apps.yml up -d
+    be=(docker compose
+      -f docker-compose.backend.yml
+      -f "$PORTS_FILE"
+      -f docker-compose.config.yml
+      -f docker-compose.custom.yml
+      -f docker-compose.apps.yml)
+  fi
+  "${be[@]}" up -d
+  "${be[@]}" rm --force --stop pkm-data-permissions site-cli-volumes-permissions >/dev/null 2>&1 || true
+  ids="$(docker ps -aq --filter label=homelab.config-job=true --filter status=exited 2>/dev/null || true)"
+  if [[ -n "$ids" ]]; then
+    # shellcheck disable=SC2086
+    docker rm -f $ids >/dev/null 2>&1 || true
   fi
 fi
 

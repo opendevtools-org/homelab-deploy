@@ -2,6 +2,9 @@
 # Include after the base compose and network overlay, before
 # docker-compose.custom.yml and docker-compose.apps.yml.
 #
+# After `up`, launchers `docker compose rm` these jobs (label homelab.config-job).
+# Site one-shots in docker-compose.custom.yml can use the same label.
+#
 # Include with the backend project only (not with docker-compose.frontend.yml).
 # Flat:
 #   docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml \
@@ -53,6 +56,8 @@ services:
         chown -R "$$owner" /data
         printf '%s\n' "$$owner" > "$$marker"
     restart: "no"
+    labels:
+      homelab.config-job: "true"
 
   # Named volumes for site CLIs start root-owned. Same marker skip as above.
   # docker-compose.custom.yml mounts these into pkm-backend; this job always runs.
@@ -82,6 +87,8 @@ services:
           printf '%s\n' "$$owner" > "$$marker"
         done
     restart: "no"
+    labels:
+      homelab.config-job: "true"
 
   pkm-backend:
     depends_on:
