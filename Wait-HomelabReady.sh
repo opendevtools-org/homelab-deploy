@@ -174,6 +174,20 @@ if exists homelab-guacamole; then
     sleep 5
   done
   log "Guacamole is up."
+  sso_out="$(docker exec homelab-guacamole sh -c 'PROP=/config/guacamole/guacamole.properties; if [ ! -f "$PROP" ]; then exit 0; fi; c=0; grep -q "^postgresql-auto-create-accounts:" "$PROP" || { echo "postgresql-auto-create-accounts: true" >> "$PROP"; c=1; }; grep -q "^http-auth-header:" "$PROP" || { echo "http-auth-header: REMOTE_USER" >> "$PROP"; c=1; }; grep -q "^guacd-hostname:" "$PROP" || { echo "guacd-hostname: 127.0.0.1" >> "$PROP"; c=1; }; [ "$c" -eq 1 ] && echo SSO_PROPS_UPDATED' 2>/dev/null || true)"
+  if [[ "$sso_out" == *SSO_PROPS_UPDATED* ]]; then
+    log "Enabled Guacamole Hub SSO (auth-header); restarting the container..."
+    docker restart homelab-guacamole >/dev/null 2>&1 || true
+    sleep 3
+    docker network connect homelab_default homelab-guacamole >/dev/null 2>&1 || true
+    elapsed=0
+    until guac_ok; do
+      elapsed=$((elapsed + 5))
+      log "  waiting after SSO restart (${elapsed}s)"
+      sleep 5
+    done
+    log "Guacamole is up with Hub SSO."
+  fi
 fi
 
 ids="$(docker ps -aq --filter label=com.docker.compose.project=homelab-backend --filter status=exited 2>/dev/null || true)"

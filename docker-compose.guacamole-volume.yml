@@ -5,6 +5,10 @@
 
 services:
   guacamole:
+    environment:
+      EXTENSIONS: auth-header
+      HTTP_AUTH_HEADER: REMOTE_USER
+      POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true"
     volumes:
       - guacamole-config:/config
     extra_hosts:
