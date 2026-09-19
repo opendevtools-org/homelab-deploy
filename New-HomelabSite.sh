@@ -388,6 +388,7 @@ for s in \
   Register-DataGitBackup.sh Register-DataGitBackupTask.ps1 \
   Pull-DataGit.sh Pull-DataGit.ps1 Pull.sh Pull.ps1 \
   Start-MarketPlugins.sh Start-MarketPlugins.ps1 \
+  Run-HomelabSite.sh Run-HomelabSite.ps1 \
   Pull-PkmDataKeepScripts.sh Pull-PkmDataKeepScripts.ps1 \
   Collect-HomelabDiag.sh Collect-HomelabDiag.ps1 Dump-PkmSidebar.py \
   Register-DataGitPull.sh Register-DataGitPullTask.ps1 \
