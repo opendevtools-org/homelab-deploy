@@ -193,31 +193,27 @@ if (Test-ContainerExists "homelab-guacamole") {
   $ErrorActionPreference = "Continue"
   & docker network connect homelab_default homelab-guacamole 2>$null | Out-Null
   $ErrorActionPreference = $prev
-  $guacProbe = @'
-import urllib.error, urllib.request
-try:
-    urllib.request.urlopen("http://homelab-guacamole:8080/", timeout=5)
-except urllib.error.HTTPError:
-    pass
-'@
   function Test-Guacamole {
     $p = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & docker exec home-hub-platform python -c $guacProbe 2>$null | Out-Null
+    & docker exec homelab-guacamole wget -q -T 2 -O /dev/null http://127.0.0.1:8080/ 2>$null
+    if ($LASTEXITCODE -eq 0) { $ErrorActionPreference = $p; return $true }
+    & docker exec homelab-guacamole curl -sf -m 2 -o /dev/null http://127.0.0.1:8080/ 2>$null
     $ok = ($LASTEXITCODE -eq 0)
     $ErrorActionPreference = $p
     return $ok
   }
-  Write-Host "Waiting for Guacamole (Tomcat can take a minute)..."
+  Write-Host "Checking Guacamole (skip after 25s if Tomcat is still starting)..."
   $ok = $false
-  for ($i = 0; $i -lt 90; $i++) {
+  for ($i = 1; $i -le 5; $i++) {
     if (Test-Guacamole) { $ok = $true; break }
-    Start-Sleep -Seconds 2
+    Write-Host ("  still starting ({0}s)" -f ($i * 5))
+    Start-Sleep -Seconds 5
   }
   if (-not $ok) {
-    Write-Host "Guacamole is not answering yet; Hub /p/guacamole/ may 502 until Tomcat finishes starting."
+    Write-Host "Guacamole not ready yet; open Hub later or wait on /p/guacamole/ (Hub retries)."
   } else {
-    Write-Host "Guacamole is reachable from Hub."
+    Write-Host "Guacamole is up."
   }
 }
 

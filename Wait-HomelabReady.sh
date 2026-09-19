@@ -113,24 +113,20 @@ echo "Hub/PKM ready (API healthy, nginx can proxy)."
 if exists homelab-guacamole; then
   start_named homelab-guacamole
   docker network connect homelab_default homelab-guacamole >/dev/null 2>&1 || true
-  guac_probe='import urllib.error, urllib.request
-try:
-    urllib.request.urlopen("http://homelab-guacamole:8080/", timeout=5)
-except urllib.error.HTTPError:
-    pass
-'
   guac_ok() {
-    docker exec home-hub-platform python -c "$guac_probe" >/dev/null 2>&1
+    docker exec homelab-guacamole wget -q -T 2 -O /dev/null http://127.0.0.1:8080/ >/dev/null 2>&1 \
+      || docker exec homelab-guacamole curl -sf -m 2 -o /dev/null http://127.0.0.1:8080/ >/dev/null 2>&1
   }
-  echo "Waiting for Guacamole (Tomcat can take a minute)..."
+  echo "Checking Guacamole (skip after 25s if Tomcat is still starting)..."
   ok=0
-  for i in $(seq 1 90); do
+  for i in 1 2 3 4 5; do
     if guac_ok; then ok=1; break; fi
-    sleep 2
+    echo "  still starting ($((i * 5))s)"
+    sleep 5
   done
   if [[ "$ok" -ne 1 ]]; then
-    echo "Guacamole is not answering yet; Hub /p/guacamole/ may 502 until Tomcat finishes starting."
+    echo "Guacamole not ready yet; open Hub later or wait on /p/guacamole/ (Hub retries)."
   else
-    echo "Guacamole is reachable from Hub."
+    echo "Guacamole is up."
   fi
 fi
