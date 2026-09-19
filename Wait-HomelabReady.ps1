@@ -198,40 +198,69 @@ if (Test-ContainerExists "homelab-guacamole") {
   $ErrorActionPreference = "Continue"
   & docker network connect homelab_default homelab-guacamole 2>$null | Out-Null
   $ErrorActionPreference = $prev
-  function Test-Guacamole {
-    $p = $ErrorActionPreference
+  function Test-HttpUrl([string]$Url) {
+    $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    $script = @'
-import urllib.request, urllib.error, socket, sys
+    $oldProg = $ProgressPreference
+    $ProgressPreference = "SilentlyContinue"
+    try {
+      Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3 | Out-Null
+      return $true
+    } catch {
+      $resp = $_.Exception.Response
+      if ($resp -and $resp.StatusCode) {
+        return ([int]$resp.StatusCode -lt 500)
+      }
+      return $false
+    } finally {
+      $ProgressPreference = $oldProg
+      $ErrorActionPreference = $prev
+    }
+  }
 
-def http_ok(url):
-    try:
-        urllib.request.urlopen(url, timeout=2)
-        return True
-    except urllib.error.HTTPError as e:
-        return e.code < 500
-    except Exception:
-        return False
-
-if http_ok("http://homelab-guacamole:8080/guacamole/") or http_ok("http://homelab-guacamole:8080/"):
-    sys.exit(0)
-try:
-    socket.create_connection(("homelab-guacamole", 8080), 2).close()
-    sys.exit(0)
-except Exception:
-    sys.exit(1)
-'@
-    $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($script))
-    & docker exec home-hub-platform python -c "import base64; exec(base64.b64decode('$b64').decode())" 2>$null
+  function Test-GuacamoleTcp([string]$HostName, [int]$Port) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $py = "import socket; socket.create_connection(('$HostName',$Port),2).close()"
+    & docker exec home-hub-platform python -c $py 2>$null
     $ok = ($LASTEXITCODE -eq 0)
-    $ErrorActionPreference = $p
+    $ErrorActionPreference = $prev
     return $ok
   }
+
+  function Test-Guacamole {
+    if (Test-HttpUrl "http://127.0.0.1:8080/guacamole/") { return $true }
+    if (Test-HttpUrl "http://127.0.0.1:8080/") { return $true }
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $raw = (& docker inspect -f "{{range.NetworkSettings.Networks}}{{.IPAddress}} {{end}}" homelab-guacamole 2>$null | Select-Object -Last 1)
+    $ErrorActionPreference = $prev
+    $ips = @()
+    if ($raw) { $ips = @($raw.ToString().Trim() -split "\s+" | Where-Object { $_ }) }
+    foreach ($ip in $ips) {
+      if (Test-GuacamoleTcp $ip 8080) { return $true }
+    }
+    if (Test-GuacamoleTcp "homelab-guacamole" 8080) { return $true }
+    return $false
+  }
+
   Write-Ts "Waiting until Guacamole answers on :8080..."
   $elapsed = 0
   while (-not (Test-Guacamole)) {
     $elapsed += 5
-    Write-Ts ("  still starting ({0}s)" -f $elapsed)
+    if (($elapsed % 30) -eq 0) {
+      $prev = $ErrorActionPreference
+      $ErrorActionPreference = "Continue"
+      $ips = (& docker inspect -f "{{range.NetworkSettings.Networks}}{{.IPAddress}}({{.NetworkID}}) {{end}}" homelab-guacamole 2>$null)
+      $tail = (& docker logs --tail 6 homelab-guacamole 2>&1 | Out-String)
+      $ErrorActionPreference = $prev
+      Write-Ts ("  still starting ({0}s) ips={1}" -f $elapsed, ([string]$ips).Trim())
+      foreach ($line in ($tail -split "`r?`n")) {
+        if ($line.Trim()) { Write-Ts ("    log: {0}" -f $line.Trim()) }
+      }
+    } else {
+      Write-Ts ("  still starting ({0}s)" -f $elapsed)
+    }
     Start-Sleep -Seconds 5
   }
   Write-Ts "Guacamole is up."

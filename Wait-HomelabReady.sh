@@ -115,29 +115,35 @@ log "Hub/PKM ready (API healthy, nginx can proxy)."
 if exists homelab-guacamole; then
   start_named homelab-guacamole
   docker network connect homelab_default homelab-guacamole >/dev/null 2>&1 || true
+  http_up() {
+    local code
+    code="$(curl -s -m 3 -o /dev/null -w '%{http_code}' "$1" || true)"
+    [[ "$code" =~ ^[1-4][0-9][0-9]$ ]]
+  }
   guac_ok() {
-    docker exec home-hub-platform python -c 'import urllib.request,urllib.error,socket,sys
-def http_ok(url):
-    try:
-        urllib.request.urlopen(url, timeout=2)
-        return True
-    except urllib.error.HTTPError as e:
-        return e.code < 500
-    except Exception:
-        return False
-if http_ok("http://homelab-guacamole:8080/guacamole/") or http_ok("http://homelab-guacamole:8080/"):
-    raise SystemExit(0)
-try:
-    socket.create_connection(("homelab-guacamole", 8080), 2).close()
-    raise SystemExit(0)
-except Exception:
-    raise SystemExit(1)' >/dev/null 2>&1
+    http_up http://127.0.0.1:8080/guacamole/ && return 0
+    http_up http://127.0.0.1:8080/ && return 0
+    local ip
+    ip="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}} {{end}}' homelab-guacamole 2>/dev/null | awk '{print $1}')"
+    if [[ -n "$ip" ]]; then
+      docker exec home-hub-platform python -c "import socket; socket.create_connection(('$ip', 8080), 2).close()" >/dev/null 2>&1 \
+        && return 0
+    fi
+    docker exec home-hub-platform python -c "import socket; socket.create_connection(('homelab-guacamole', 8080), 2).close()" >/dev/null 2>&1
   }
   log "Waiting until Guacamole answers on :8080..."
   elapsed=0
   until guac_ok; do
     elapsed=$((elapsed + 5))
-    log "  still starting (${elapsed}s)"
+    if (( elapsed % 30 == 0 )); then
+      ips="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}} {{end}}' homelab-guacamole 2>/dev/null || true)"
+      log "  still starting (${elapsed}s) ips=${ips}"
+      docker logs --tail 6 homelab-guacamole 2>&1 | while IFS= read -r line; do
+        [[ -n "$line" ]] && log "    log: $line"
+      done
+    else
+      log "  still starting (${elapsed}s)"
+    fi
     sleep 5
   done
   log "Guacamole is up."
