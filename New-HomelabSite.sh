@@ -491,7 +491,7 @@ if [[ "$START" -eq 1 ]]; then
     -f docker-compose.config.yml \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
-    rm --force --stop pkm-data-permissions site-cli-volumes-permissions >/dev/null 2>&1 || true
+    rm --force --stop >/dev/null 2>&1 || true
   ids="$(docker ps -aq --filter label=homelab.config-job=true --filter status=exited 2>/dev/null || true)"
   if [[ -n "$ids" ]]; then
     # shellcheck disable=SC2086

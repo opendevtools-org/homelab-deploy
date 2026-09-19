@@ -112,7 +112,7 @@ if [[ "$want_be" -eq 1 ]]; then
       -f docker-compose.apps.yml)
   fi
   "${be[@]}" up -d
-  "${be[@]}" rm --force --stop pkm-data-permissions site-cli-volumes-permissions >/dev/null 2>&1 || true
+  "${be[@]}" rm --force --stop >/dev/null 2>&1 || true
   ids="$(docker ps -aq --filter label=homelab.config-job=true --filter status=exited 2>/dev/null || true)"
   if [[ -n "$ids" ]]; then
     # shellcheck disable=SC2086

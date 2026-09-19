@@ -119,7 +119,7 @@ if ($wantBackend) {
   if ($LASTEXITCODE -ne 0) {
     Write-Host "Could not start homelab-backend with market plugins."
   } else {
-    $rm = $backendArgs + @("rm", "--force", "--stop", "pkm-data-permissions", "site-cli-volumes-permissions")
+    $rm = $backendArgs + @("rm", "--force", "--stop")
     & docker @rm 2>$null | Out-Null
     $gone = & docker ps -aq --filter "label=homelab.config-job=true" --filter "status=exited" 2>$null
     if ($gone) { & docker rm -f @gone 2>$null | Out-Null }
