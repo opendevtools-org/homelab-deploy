@@ -231,6 +231,20 @@ start_data_lock_containers() {
   STOPPED_FOR_SYNC=()
 }
 
+set_sqlite_skip_worktree() {
+  local enable="$1"
+  local flag p
+  if [[ "$enable" == "1" ]]; then
+    flag="--skip-worktree"
+  else
+    flag="--no-skip-worktree"
+  fi
+  for p in data/hub/platform.db data/pkm/pkm.db; do
+    git ls-files --error-unmatch -- "$p" >/dev/null 2>&1 || continue
+    git update-index "$flag" -- "$p" >/dev/null 2>&1 || true
+  done
+}
+
 merge_sqlite_conflict() {
   local path="$1"
   local database_type temp_dir summary py
@@ -405,6 +419,7 @@ BRANCH="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
 stop_data_lock_containers
 trap start_data_lock_containers EXIT
+set_sqlite_skip_worktree 0
 commit_local_changes
 sync_with_origin
 normalize_numbered_doc_directories
@@ -422,3 +437,4 @@ if [[ -f "$SCRIPT_ROOT/Start-MarketPlugins.sh" ]]; then
   chmod +x "$SCRIPT_ROOT/Start-MarketPlugins.sh" 2>/dev/null || true
   /bin/bash "$SCRIPT_ROOT/Start-MarketPlugins.sh" || notify "WARN" "Market plugin start after pull did not fully succeed."
 fi
+set_sqlite_skip_worktree 1

@@ -147,6 +147,21 @@ function Start-DataLockContainers {
   $script:stoppedForSync = @()
 }
 
+function Set-SqliteSkipWorktree {
+  param([bool]$Enable)
+  $flag = if ($Enable) { "--skip-worktree" } else { "--no-skip-worktree" }
+  foreach ($rel in @("data/hub/platform.db", "data/pkm/pkm.db")) {
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & git ls-files --error-unmatch -- $rel 2>$null | Out-Null
+    $tracked = $LASTEXITCODE -eq 0
+    if ($tracked) {
+      & git update-index $flag -- $rel 2>$null | Out-Null
+    }
+    $ErrorActionPreference = $prev
+  }
+}
+
 function Export-GitBlob {
   param(
     [string]$ObjectSpec,
@@ -558,6 +573,7 @@ try {
   }
 
   Save-PkmPositions
+  Set-SqliteSkipWorktree -Enable $false
   try {
     Stop-DataLockContainers
     Commit-LocalChanges
@@ -579,6 +595,7 @@ try {
   if (Test-Path $startPlugins) {
     & $startPlugins
   }
+  Set-SqliteSkipWorktree -Enable $true
 } catch {
   $err = "Pull failed: {0}" -f $_.Exception.Message
   Send-Notification -Level "ERROR" -Message $err
