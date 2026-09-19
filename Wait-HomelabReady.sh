@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Bring Hub/PKM stacks up, wait for PKM API, restart nginx so the UI is not 502.
+# Wait for PKM API and restart nginx so the UI is not 502.
+# Does not rebuild images. Compose up only if a container is missing.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -20,37 +21,55 @@ fi
 
 command -v docker >/dev/null 2>&1 || { echo "Wait-HomelabReady skipped (docker not found)."; exit 0; }
 
-if [[ -f upstream/docker-compose.backend.yml ]]; then
-  be=(docker compose --project-directory .
-    -f upstream/docker-compose.backend.yml
-    -f "upstream/$PORTS_FILE"
-    -f docker-compose.config.yml
-    -f docker-compose.custom.yml
-    -f docker-compose.apps.yml)
-else
-  be=(docker compose
-    -f docker-compose.backend.yml
-    -f "$PORTS_FILE"
-    -f docker-compose.config.yml
-    -f docker-compose.custom.yml
-    -f docker-compose.apps.yml)
+exists() { docker inspect "$1" >/dev/null 2>&1; }
+running() { [[ "$(docker inspect -f '{{.State.Running}}' "$1" 2>/dev/null || true)" == "true" ]]; }
+start_named() {
+  exists "$1" || return 0
+  running "$1" && return 0
+  echo "Starting $1..."
+  docker start "$1" >/dev/null 2>&1 || true
+}
+
+if ! exists pkm-backend; then
+  echo "pkm-backend missing; running Compose backend up..."
+  if [[ -f upstream/docker-compose.backend.yml ]]; then
+    docker compose --project-directory . \
+      -f upstream/docker-compose.backend.yml \
+      -f "upstream/$PORTS_FILE" \
+      -f docker-compose.config.yml \
+      -f docker-compose.custom.yml \
+      -f docker-compose.apps.yml up -d || true
+  else
+    docker compose \
+      -f docker-compose.backend.yml \
+      -f "$PORTS_FILE" \
+      -f docker-compose.config.yml \
+      -f docker-compose.custom.yml \
+      -f docker-compose.apps.yml up -d || true
+  fi
 fi
 
-if [[ -f upstream/docker-compose.frontend.yml ]]; then
-  fe=(docker compose --project-directory .
-    -f upstream/docker-compose.frontend.yml
-    -f "upstream/$FRONTEND_PORTS_FILE")
-else
-  fe=(docker compose -f docker-compose.frontend.yml -f "$FRONTEND_PORTS_FILE")
+if ! exists pkm-frontend; then
+  echo "pkm-frontend missing; running Compose frontend up..."
+  extra_fe=()
+  [[ -f docker-compose.frontend.apps.yml ]] && extra_fe+=(-f docker-compose.frontend.apps.yml)
+  if [[ -f upstream/docker-compose.frontend.yml ]]; then
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${extra_fe[@]}" up -d || true
+  else
+    docker compose -f docker-compose.frontend.yml -f "$FRONTEND_PORTS_FILE" \
+      "${extra_fe[@]}" up -d || true
+  fi
 fi
-[[ -f docker-compose.frontend.apps.yml ]] && fe+=(-f docker-compose.frontend.apps.yml)
 
-echo "Ensuring homelab-backend is up (API before nginx)..."
-"${be[@]}" up -d
-"${be[@]}" rm --force >/dev/null 2>&1 || true
+for n in pkm-backend home-hub-platform homelab-guacamole pkm-frontend home-hub; do
+  start_named "$n"
+done
 
-echo "Ensuring homelab-frontend is up..."
-"${fe[@]}" up -d
+running pkm-backend || { echo "pkm-backend is not running. Check: docker logs pkm-backend" >&2; exit 1; }
+running pkm-frontend || { echo "pkm-frontend is not running. Check: docker logs pkm-frontend" >&2; exit 1; }
 
 probe='import urllib.request; urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=5).read()'
 

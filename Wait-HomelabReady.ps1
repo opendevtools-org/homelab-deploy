@@ -1,11 +1,12 @@
 <#
 .SYNOPSIS
-  Bring Hub/PKM Compose stacks up, wait for the PKM API, restart nginx so the UI is not 502.
+  Wait for PKM API and restart nginx so the Hub/PKM UI is not 502.
 
 .DESCRIPTION
-  Backend first (creates homelab_default), then frontend, remove exited init jobs,
-  wait until pkm-backend /api/health answers, restart pkm-frontend and home-hub
-  so nginx re-resolves Docker DNS, then confirm the frontend can reach the API.
+  Starts Hub/PKM containers if they exist and are stopped. Does not rebuild
+  images. Waits for pkm-backend /api/health, restarts pkm-frontend and home-hub
+  so nginx re-resolves Docker DNS, then checks that nginx can reach the API.
+  Compose up is used only when pkm-backend is missing.
 #>
 [CmdletBinding()]
 param(
@@ -34,19 +35,26 @@ if ((Split-Path -Leaf $here) -eq "upstream" -and (Test-SiteRoot $parent)) {
 
 Set-Location $siteRoot
 $fromEnv = [Environment]::GetEnvironmentVariable("HOMELAB_PORTS")
-if ([string]::IsNullOrWhiteSpace($fromEnv) -eq $false) { $Ports = $fromEnv }
+if (-not [string]::IsNullOrWhiteSpace($fromEnv)) { $Ports = $fromEnv }
 
 $portsFile = if ($Ports -eq "local") { "docker-compose.local.yml" } else { "docker-compose.lan.yml" }
 $frontendPortsFile = if ($Ports -eq "local") { "docker-compose.frontend.local.yml" } else { "docker-compose.frontend.lan.yml" }
 
-function Invoke-Docker {
-  param([string[]]$DockerArgs)
+function Test-ContainerRunning([string]$Name) {
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  & docker @DockerArgs
+  $state = (& docker inspect -f "{{.State.Running}}" $Name 2>$null | Select-Object -Last 1)
+  $ErrorActionPreference = $prev
+  return ($null -ne $state -and $state.ToString().Trim() -eq "true")
+}
+
+function Test-ContainerExists([string]$Name) {
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $null = & docker inspect $Name 2>$null
   $code = $LASTEXITCODE
   $ErrorActionPreference = $prev
-  return $code
+  return ($code -eq 0)
 }
 
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -54,48 +62,74 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
   exit 0
 }
 
-$backendArgs = @("compose", "--project-directory", $siteRoot)
-$upstreamBe = Join-Path $siteRoot "upstream\docker-compose.backend.yml"
-if (Test-Path $upstreamBe) {
-  $backendArgs += @(
-    "-f", "upstream/docker-compose.backend.yml",
-    "-f", ("upstream/{0}" -f $portsFile),
-    "-f", "docker-compose.config.yml",
-    "-f", "docker-compose.custom.yml",
-    "-f", "docker-compose.apps.yml"
-  )
-} else {
-  $backendArgs += @(
-    "-f", "docker-compose.backend.yml",
-    "-f", $portsFile,
-    "-f", "docker-compose.config.yml",
-    "-f", "docker-compose.custom.yml",
-    "-f", "docker-compose.apps.yml"
-  )
+function Start-Named([string]$Name) {
+  if (-not (Test-ContainerExists $Name)) { return }
+  if (Test-ContainerRunning $Name) { return }
+  Write-Host ("Starting {0}..." -f $Name)
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & docker start $Name | Out-Null
+  $ErrorActionPreference = $prev
 }
 
-$frontendArgs = @("compose", "--project-directory", $siteRoot)
-$upstreamFe = Join-Path $siteRoot "upstream\docker-compose.frontend.yml"
-if (Test-Path $upstreamFe) {
-  $frontendArgs += @(
-    "-f", "upstream/docker-compose.frontend.yml",
-    "-f", ("upstream/{0}" -f $frontendPortsFile)
-  )
-} else {
-  $frontendArgs += @("-f", "docker-compose.frontend.yml", "-f", $frontendPortsFile)
-}
-if (Test-Path (Join-Path $siteRoot "docker-compose.frontend.apps.yml")) {
-  $frontendArgs += @("-f", "docker-compose.frontend.apps.yml")
+if (-not (Test-ContainerExists "pkm-backend")) {
+  Write-Host "pkm-backend missing; running Compose backend up..."
+  $backendArgs = @("compose", "--project-directory", $siteRoot)
+  $upstreamBe = Join-Path $siteRoot "upstream\docker-compose.backend.yml"
+  if (Test-Path $upstreamBe) {
+    $backendArgs += @(
+      "-f", "upstream/docker-compose.backend.yml",
+      "-f", ("upstream/{0}" -f $portsFile),
+      "-f", "docker-compose.config.yml",
+      "-f", "docker-compose.custom.yml",
+      "-f", "docker-compose.apps.yml"
+    )
+  } else {
+    $backendArgs += @(
+      "-f", "docker-compose.backend.yml",
+      "-f", $portsFile,
+      "-f", "docker-compose.config.yml",
+      "-f", "docker-compose.custom.yml",
+      "-f", "docker-compose.apps.yml"
+    )
+  }
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & docker @($backendArgs + @("up", "-d")) | Out-Null
+  $ErrorActionPreference = $prev
 }
 
-Write-Host "Ensuring homelab-backend is up (API before nginx)..."
-$code = Invoke-Docker ($backendArgs + @("up", "-d"))
-if ($code -ne 0) { throw "docker compose backend up failed" }
-$null = Invoke-Docker ($backendArgs + @("rm", "--force"))
+if (-not (Test-ContainerExists "pkm-frontend")) {
+  Write-Host "pkm-frontend missing; running Compose frontend up..."
+  $frontendArgs = @("compose", "--project-directory", $siteRoot)
+  $upstreamFe = Join-Path $siteRoot "upstream\docker-compose.frontend.yml"
+  if (Test-Path $upstreamFe) {
+    $frontendArgs += @(
+      "-f", "upstream/docker-compose.frontend.yml",
+      "-f", ("upstream/{0}" -f $frontendPortsFile)
+    )
+  } else {
+    $frontendArgs += @("-f", "docker-compose.frontend.yml", "-f", $frontendPortsFile)
+  }
+  if (Test-Path (Join-Path $siteRoot "docker-compose.frontend.apps.yml")) {
+    $frontendArgs += @("-f", "docker-compose.frontend.apps.yml")
+  }
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & docker @($frontendArgs + @("up", "-d")) | Out-Null
+  $ErrorActionPreference = $prev
+}
 
-Write-Host "Ensuring homelab-frontend is up..."
-$code = Invoke-Docker ($frontendArgs + @("up", "-d"))
-if ($code -ne 0) { throw "docker compose frontend up failed (is homelab_default present? start backend first)." }
+foreach ($n in @("pkm-backend", "home-hub-platform", "homelab-guacamole", "pkm-frontend", "home-hub")) {
+  Start-Named $n
+}
+
+if (-not (Test-ContainerRunning "pkm-backend")) {
+  throw "pkm-backend is not running. Check: docker logs pkm-backend"
+}
+if (-not (Test-ContainerRunning "pkm-frontend")) {
+  throw "pkm-frontend is not running. Check: docker logs pkm-frontend"
+}
 
 $probe = @'
 import urllib.request
@@ -148,7 +182,7 @@ for ($i = 0; $i -lt 30; $i++) {
   Start-Sleep -Seconds 1
 }
 if (-not $ok) {
-  throw "pkm-frontend still cannot reach pkm-backend:8000 (502). Check Docker networks: both must be on homelab_default."
+  throw "pkm-frontend still cannot reach pkm-backend:8000 (502). Both must be on homelab_default."
 }
 
 Write-Host "Hub/PKM ready (API healthy, nginx can proxy)."
