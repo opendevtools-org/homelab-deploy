@@ -66,7 +66,7 @@ docker compose -f docker-compose.frontend.yml -f docker-compose.frontend.remote.
 
 Login: `HUB_ADMIN_*` from `.env`. Create users under Utenti. Data in `./data/hub` and `./data/pkm` (gitignored) on the **server**.
 
-On first Platform start, Hub installs **Guacamole** from the community catalog (`HUB_DEFAULT_MARKET_PLUGINS=guacamole`) unless you already uninstalled it. Compose files live only under `data/hub/plugins/guacamole/` (not in the Hub/PKM site compose). Open it from the Hub catalog (`/p/guacamole/`). Set `HUB_DEFAULT_MARKET_PLUGINS=none` to skip.
+On first Platform start, Hub installs **Guacamole** from the community catalog (`HUB_DEFAULT_MARKET_PLUGINS=guacamole`) unless you already uninstalled it. Compose files live only under `data/hub/plugins/guacamole/` (not in the Hub/PKM site compose). Plugin runtime data (`data/hub/plugins/*/data/`, including Guacamole JARs and schema copies) is gitignored. Open it from the Hub catalog (`/p/guacamole/`). Set `HUB_DEFAULT_MARKET_PLUGINS=none` to skip.
 
 ## LAN HTTPS (clipboard / paste)
 

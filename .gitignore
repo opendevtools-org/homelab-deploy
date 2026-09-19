@@ -11,6 +11,7 @@ tmp-*
 upstream/data/
 logs/
 data/pkm/scripts/**/.uploads/
+data/hub/plugins/*/data/
 *.local-conflict.*
 cli/**/__pycache__/
 cli/**/.pytest_cache/
