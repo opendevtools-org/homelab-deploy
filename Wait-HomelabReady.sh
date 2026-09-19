@@ -116,32 +116,31 @@ if exists homelab-guacamole; then
   start_named homelab-guacamole
   docker network connect homelab_default homelab-guacamole >/dev/null 2>&1 || true
   guac_ok() {
-    docker exec home-hub-platform python -c 'import urllib.request,urllib.error,sys
-u="http://homelab-guacamole:8080/guacamole/"
-try:
-    urllib.request.urlopen(u,timeout=2); sys.exit(0)
-except urllib.error.HTTPError as e:
-    sys.exit(0 if e.code<500 else 1)
-except Exception:
+    docker exec home-hub-platform python -c 'import urllib.request,urllib.error,socket,sys
+def http_ok(url):
     try:
-        urllib.request.urlopen("http://homelab-guacamole:8080/",timeout=2); sys.exit(0)
+        urllib.request.urlopen(url, timeout=2)
+        return True
     except urllib.error.HTTPError as e:
-        sys.exit(0 if e.code<500 else 1)
+        return e.code < 500
     except Exception:
-        sys.exit(1)' >/dev/null 2>&1
+        return False
+if http_ok("http://homelab-guacamole:8080/guacamole/") or http_ok("http://homelab-guacamole:8080/"):
+    raise SystemExit(0)
+try:
+    socket.create_connection(("homelab-guacamole", 8080), 2).close()
+    raise SystemExit(0)
+except Exception:
+    raise SystemExit(1)' >/dev/null 2>&1
   }
-  log "Checking Guacamole via Hub platform..."
-  ok=0
-  for i in 1 2 3 4 5; do
-    if guac_ok; then ok=1; break; fi
-    log "  still starting ($((i * 5))s)"
+  log "Waiting until Guacamole answers on :8080..."
+  elapsed=0
+  until guac_ok; do
+    elapsed=$((elapsed + 5))
+    log "  still starting (${elapsed}s)"
     sleep 5
   done
-  if [[ "$ok" -ne 1 ]]; then
-    log "Guacamole not ready yet; open Hub later or wait on /p/guacamole/ (Hub retries)."
-  else
-    log "Guacamole is up."
-  fi
+  log "Guacamole is up."
 fi
 
 ids="$(docker ps -aq --filter label=com.docker.compose.project=homelab-backend --filter status=exited 2>/dev/null || true)"

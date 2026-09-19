@@ -201,35 +201,40 @@ if (Test-ContainerExists "homelab-guacamole") {
   function Test-Guacamole {
     $p = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    $py = 'import urllib.request,urllib.error,sys;u="http://homelab-guacamole:8080/guacamole/";
+    $script = @'
+import urllib.request, urllib.error, socket, sys
+
+def http_ok(url):
+    try:
+        urllib.request.urlopen(url, timeout=2)
+        return True
+    except urllib.error.HTTPError as e:
+        return e.code < 500
+    except Exception:
+        return False
+
+if http_ok("http://homelab-guacamole:8080/guacamole/") or http_ok("http://homelab-guacamole:8080/"):
+    sys.exit(0)
 try:
- urllib.request.urlopen(u,timeout=2); sys.exit(0)
-except urllib.error.HTTPError as e:
- sys.exit(0 if e.code<500 else 1)
+    socket.create_connection(("homelab-guacamole", 8080), 2).close()
+    sys.exit(0)
 except Exception:
- try:
-  urllib.request.urlopen("http://homelab-guacamole:8080/",timeout=2); sys.exit(0)
- except urllib.error.HTTPError as e:
-  sys.exit(0 if e.code<500 else 1)
- except Exception:
-  sys.exit(1)'
-    & docker exec home-hub-platform python -c $py 2>$null
+    sys.exit(1)
+'@
+    $b64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($script))
+    & docker exec home-hub-platform python -c "import base64; exec(base64.b64decode('$b64').decode())" 2>$null
     $ok = ($LASTEXITCODE -eq 0)
     $ErrorActionPreference = $p
     return $ok
   }
-  Write-Ts "Checking Guacamole via Hub platform..."
-  $ok = $false
-  for ($i = 1; $i -le 5; $i++) {
-    if (Test-Guacamole) { $ok = $true; break }
-    Write-Ts ("  still starting ({0}s)" -f ($i * 5))
+  Write-Ts "Waiting until Guacamole answers on :8080..."
+  $elapsed = 0
+  while (-not (Test-Guacamole)) {
+    $elapsed += 5
+    Write-Ts ("  still starting ({0}s)" -f $elapsed)
     Start-Sleep -Seconds 5
   }
-  if (-not $ok) {
-    Write-Ts "Guacamole not ready yet; open Hub later or wait on /p/guacamole/ (Hub retries)."
-  } else {
-    Write-Ts "Guacamole is up."
-  }
+  Write-Ts "Guacamole is up."
 }
 
 $prev = $ErrorActionPreference
