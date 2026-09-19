@@ -275,7 +275,6 @@ $launcherNames = @(
   "Refresh-SiteProductTrees.ps1",
   "Refresh-SiteProductTrees.sh",
   "docker-compose.config.yml",
-  "docker-compose.guacamole-volume.yml",
   "docker-compose.https.yml",
   "Caddyfile",
   "README.site.md"

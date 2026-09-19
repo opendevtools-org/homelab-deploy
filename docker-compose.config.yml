@@ -6,6 +6,10 @@
 # service names) so only already-exited one-shots are removed. --stop
 # would halt pkm-backend and hub-platform too.
 #
+# Guacamole Postgres/SSO is docker-compose.guacamole-volume.yml (last -f),
+# only if the Market plugin is installed. Do not merge that service into
+# this file: Compose would create Guacamole even when the plugin is absent.
+#
 # Include with the backend project only (not with docker-compose.frontend.yml).
 # Flat:
 #   docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml \

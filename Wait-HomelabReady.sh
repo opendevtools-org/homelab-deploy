@@ -188,6 +188,8 @@ if exists homelab-guacamole; then
     done
     log "Guacamole is up with Hub SSO."
   fi
+  log "Syncing Hub users and admin rights into Guacamole..."
+  docker exec home-hub-platform python -c "from app.agent import _apply_guacamole_hub_acl; _apply_guacamole_hub_acl()" >/dev/null 2>&1 || true
 fi
 
 ids="$(docker ps -aq --filter label=com.docker.compose.project=homelab-backend --filter status=exited 2>/dev/null || true)"

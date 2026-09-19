@@ -132,7 +132,6 @@ LAUNCHERS=(
   Refresh-SiteProductTrees.sh
   Refresh-SiteProductTrees.ps1
   docker-compose.config.yml
-  docker-compose.guacamole-volume.yml
   docker-compose.https.yml
   Caddyfile
   README.site.md

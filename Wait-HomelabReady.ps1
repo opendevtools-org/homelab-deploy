@@ -312,6 +312,8 @@ if (Test-ContainerExists "homelab-guacamole") {
     }
     Write-Ts "Guacamole is up with Hub SSO."
   }
+  Write-Ts "Syncing Hub users and admin rights into Guacamole..."
+  $null = & docker exec home-hub-platform python -c "from app.agent import _apply_guacamole_hub_acl; _apply_guacamole_hub_acl()" 2>$null
   $ErrorActionPreference = $prev
 }
 
