@@ -204,12 +204,13 @@ if (Test-ContainerExists "homelab-guacamole") {
     $oldProg = $ProgressPreference
     $ProgressPreference = "SilentlyContinue"
     try {
-      Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3 | Out-Null
-      return $true
+      $r = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3
+      return ([int]$r.StatusCode -lt 500)
     } catch {
-      $resp = $_.Exception.Response
-      if ($resp -and $resp.StatusCode) {
-        return ([int]$resp.StatusCode -lt 500)
+      $respProp = $_.Exception.PSObject.Properties["Response"]
+      if ($respProp -and $respProp.Value) {
+        $status = $respProp.Value.StatusCode
+        if ($null -ne $status) { return ([int]$status -lt 500) }
       }
       return $false
     } finally {
