@@ -186,4 +186,39 @@ if (-not $ok) {
 }
 
 Write-Host "Hub/PKM ready (API healthy, nginx can proxy)."
+
+if (Test-ContainerExists "homelab-guacamole") {
+  Start-Named "homelab-guacamole"
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & docker network connect homelab_default homelab-guacamole 2>$null | Out-Null
+  $ErrorActionPreference = $prev
+  $guacProbe = @'
+import urllib.error, urllib.request
+try:
+    urllib.request.urlopen("http://homelab-guacamole:8080/", timeout=5)
+except urllib.error.HTTPError:
+    pass
+'@
+  function Test-Guacamole {
+    $p = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    & docker exec home-hub-platform python -c $guacProbe 2>$null | Out-Null
+    $ok = ($LASTEXITCODE -eq 0)
+    $ErrorActionPreference = $p
+    return $ok
+  }
+  Write-Host "Waiting for Guacamole (Tomcat can take a minute)..."
+  $ok = $false
+  for ($i = 0; $i -lt 90; $i++) {
+    if (Test-Guacamole) { $ok = $true; break }
+    Start-Sleep -Seconds 2
+  }
+  if (-not $ok) {
+    Write-Host "Guacamole is not answering yet; Hub /p/guacamole/ may 502 until Tomcat finishes starting."
+  } else {
+    Write-Host "Guacamole is reachable from Hub."
+  }
+}
+
 exit 0
