@@ -270,7 +270,13 @@ if [[ "$START" -eq 1 ]]; then
     -f "upstream/$PORTS_FILE" \
     -f docker-compose.config.yml \
     -f docker-compose.custom.yml \
-    -f docker-compose.apps.yml up -d --pull always
+    -f docker-compose.apps.yml pull || log "Compose pull reported errors (local build images are skipped); continuing."
+  docker compose --project-directory . \
+    -f upstream/docker-compose.backend.yml \
+    -f "upstream/$PORTS_FILE" \
+    -f docker-compose.config.yml \
+    -f docker-compose.custom.yml \
+    -f docker-compose.apps.yml up -d
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
@@ -291,14 +297,23 @@ if [[ "$START" -eq 1 ]]; then
       -f upstream/docker-compose.frontend.yml \
       -f "upstream/$FRONTEND_PORTS_FILE" \
       "${extra_fe[@]}" \
-      -f docker-compose.https.yml up -d --pull always
+      -f docker-compose.https.yml pull || true
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${extra_fe[@]}" \
+      -f docker-compose.https.yml up -d
   else
     extra_fe=()
     [[ -f docker-compose.frontend.apps.yml ]] && extra_fe+=(-f docker-compose.frontend.apps.yml)
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
       -f "upstream/$FRONTEND_PORTS_FILE" \
-      "${extra_fe[@]}" up -d --pull always
+      "${extra_fe[@]}" pull || true
+    docker compose --project-directory . \
+      -f upstream/docker-compose.frontend.yml \
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${extra_fe[@]}" up -d
   fi
   log "Compose up done."
 

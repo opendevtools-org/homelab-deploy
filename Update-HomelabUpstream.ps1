@@ -416,7 +416,9 @@ if ($Start) {
       "-f", "docker-compose.custom.yml",
       "-f", "docker-compose.apps.yml"
     )
-    $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d", "--pull", "always"))
+    $code = Invoke-DockerCommand ($backendComposeArgs + @("pull"))
+    if ($code -ne 0) { Write-Ts "Compose pull reported errors (local build images are skipped); continuing." }
+    $code = Invoke-DockerCommand ($backendComposeArgs + @("up", "-d"))
     if ($code -ne 0) { throw "docker compose up failed" }
     $null = Invoke-DockerCommand ($backendComposeArgs + @("rm", "--force"))
     $gone = & docker ps -aq --filter "label=homelab.config-job=true" --filter "status=exited" 2>$null
@@ -433,7 +435,9 @@ if ($Start) {
       Write-Ts "LAN HTTPS overlay (Caddy) enabled."
       $frontendComposeArgs += @("-f", "docker-compose.https.yml")
     }
-    $code = Invoke-DockerCommand ($frontendComposeArgs + @("up", "-d", "--pull", "always"))
+    $code = Invoke-DockerCommand ($frontendComposeArgs + @("pull"))
+    if ($code -ne 0) { Write-Ts "Frontend pull reported errors; continuing." }
+    $code = Invoke-DockerCommand ($frontendComposeArgs + @("up", "-d"))
     if ($code -ne 0) { throw "docker compose frontend up failed" }
     Write-Ts "Compose up done."
   } finally {

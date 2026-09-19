@@ -116,10 +116,21 @@ if exists homelab-guacamole; then
   start_named homelab-guacamole
   docker network connect homelab_default homelab-guacamole >/dev/null 2>&1 || true
   guac_ok() {
-    docker exec homelab-guacamole wget -q -T 2 -O /dev/null http://127.0.0.1:8080/ >/dev/null 2>&1 \
-      || docker exec homelab-guacamole curl -sf -m 2 -o /dev/null http://127.0.0.1:8080/ >/dev/null 2>&1
+    docker exec home-hub-platform python -c 'import urllib.request,urllib.error,sys
+u="http://homelab-guacamole:8080/guacamole/"
+try:
+    urllib.request.urlopen(u,timeout=2); sys.exit(0)
+except urllib.error.HTTPError as e:
+    sys.exit(0 if e.code<500 else 1)
+except Exception:
+    try:
+        urllib.request.urlopen("http://homelab-guacamole:8080/",timeout=2); sys.exit(0)
+    except urllib.error.HTTPError as e:
+        sys.exit(0 if e.code<500 else 1)
+    except Exception:
+        sys.exit(1)' >/dev/null 2>&1
   }
-  log "Checking Guacamole (skip after 25s if Tomcat is still starting)..."
+  log "Checking Guacamole via Hub platform..."
   ok=0
   for i in 1 2 3 4 5; do
     if guac_ok; then ok=1; break; fi

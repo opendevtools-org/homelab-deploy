@@ -201,14 +201,24 @@ if (Test-ContainerExists "homelab-guacamole") {
   function Test-Guacamole {
     $p = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    & docker exec homelab-guacamole wget -q -T 2 -O /dev/null http://127.0.0.1:8080/ 2>$null
-    if ($LASTEXITCODE -eq 0) { $ErrorActionPreference = $p; return $true }
-    & docker exec homelab-guacamole curl -sf -m 2 -o /dev/null http://127.0.0.1:8080/ 2>$null
+    $py = 'import urllib.request,urllib.error,sys;u="http://homelab-guacamole:8080/guacamole/";
+try:
+ urllib.request.urlopen(u,timeout=2); sys.exit(0)
+except urllib.error.HTTPError as e:
+ sys.exit(0 if e.code<500 else 1)
+except Exception:
+ try:
+  urllib.request.urlopen("http://homelab-guacamole:8080/",timeout=2); sys.exit(0)
+ except urllib.error.HTTPError as e:
+  sys.exit(0 if e.code<500 else 1)
+ except Exception:
+  sys.exit(1)'
+    & docker exec home-hub-platform python -c $py 2>$null
     $ok = ($LASTEXITCODE -eq 0)
     $ErrorActionPreference = $p
     return $ok
   }
-  Write-Ts "Checking Guacamole (skip after 25s if Tomcat is still starting)..."
+  Write-Ts "Checking Guacamole via Hub platform..."
   $ok = $false
   for ($i = 1; $i -le 5; $i++) {
     if (Test-Guacamole) { $ok = $true; break }
