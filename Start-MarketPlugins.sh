@@ -29,14 +29,14 @@ for dir in "$ROOT"/*/; do
   compose=""
   for f in docker-compose.backend.yml docker-compose.yml; do
     if [[ -f "$dir$f" ]]; then
-      compose="$f"
+      compose="$dir$f"
       break
     fi
   done
   [[ -n "$compose" ]] || continue
   cmd=(docker compose --project-directory "$dir" --project-name "homelab-plugin-${id}" -f "$compose")
   if [[ -f "$dir/docker-compose.hub-override.yml" ]]; then
-    cmd+=(-f docker-compose.hub-override.yml)
+    cmd+=(-f "$dir/docker-compose.hub-override.yml")
   fi
   if "${cmd[@]}" up -d; then
     started=1

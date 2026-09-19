@@ -29,7 +29,8 @@ Get-ChildItem -Directory $root | ForEach-Object {
   if ($id -notmatch '^[a-z0-9][a-z0-9_-]*$') { return }
   $compose = $null
   foreach ($f in @("docker-compose.backend.yml", "docker-compose.yml")) {
-    if (Test-Path (Join-Path $_.FullName $f)) { $compose = $f; break }
+    $candidate = Join-Path $_.FullName $f
+    if (Test-Path -LiteralPath $candidate) { $compose = $candidate; break }
   }
   if (-not $compose) { return }
   $cmd = @(
@@ -37,7 +38,7 @@ Get-ChildItem -Directory $root | ForEach-Object {
     "--project-name", "homelab-plugin-$id", "-f", $compose
   )
   $ov = Join-Path $_.FullName "docker-compose.hub-override.yml"
-  if (Test-Path $ov) { $cmd += @("-f", "docker-compose.hub-override.yml") }
+  if (Test-Path -LiteralPath $ov) { $cmd += @("-f", $ov) }
   $cmd += @("up", "-d")
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
