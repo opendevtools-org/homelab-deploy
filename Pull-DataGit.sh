@@ -21,6 +21,7 @@ BACKUP_PATHS=(
   Pull-DataGit.ps1 Pull-DataGit.sh
   Pull.ps1 Pull.sh
   Start-MarketPlugins.ps1 Start-MarketPlugins.sh
+  Run-HomelabSite.ps1 Run-HomelabSite.sh
   Pull-PkmDataKeepScripts.ps1 Pull-PkmDataKeepScripts.sh
   Collect-HomelabDiag.ps1 Collect-HomelabDiag.sh
   Dump-PkmSidebar.py

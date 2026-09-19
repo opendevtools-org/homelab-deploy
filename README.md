@@ -284,8 +284,27 @@ No flags: only `git pull` in `upstream/`.
 | *(none)* | — | Pull in `upstream/` only. |
 | `--commit` / `-Commit` | off | Commit submodule pointer. |
 | `--push` / `-Push` | off | Rebase onto origin, then push (implies commit). |
-| `--start` / `-Start` | off | Compose pull + up (includes apps), then PKM import from disk. |
+| `--start` / `-Start` | off | Compose pull + up (includes apps), then PKM import from disk. Always runs `Start-MarketPlugins` after the update (also when `-Start` is off). |
 | `--ports` / `-Ports` | `lan` | Ports overlay with start. |
+
+### Full refresh — `Run-HomelabSite`
+
+Runs the usual site sequence in order:
+
+1. `Update-HomelabUpstream -Start` (product + Compose + `Start-MarketPlugins`)
+2. `Pull-DataGit` (data sync with origin)
+
+```bash
+./Run-HomelabSite.sh
+./Run-HomelabSite.sh --commit --push
+```
+
+```powershell
+.\Run-HomelabSite.ps1
+.\Run-HomelabSite.ps1 -Commit -Push
+```
+
+`--no-start` / `-NoStart` skips Compose up. `--skip-data-pull` / `-SkipDataPull` skips `Pull-DataGit`.
 
 ### Daily data backup — `Backup-DataGit`
 

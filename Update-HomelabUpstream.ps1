@@ -8,7 +8,8 @@
 
   After pull, refreshes site-root launchers from upstream/:
     Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*, Pull-PkmDataKeepScripts.*,
-    Collect-HomelabDiag.*, Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
+    Start-MarketPlugins.*, Collect-HomelabDiag.*, Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
+    Run-HomelabSite.*,
     docker-compose.config.yml, docker-compose.https.yml, Caddyfile,
     README.site.md, the layered gitignore files, scriptkit/,
     agent-context/ (not site/), docker/*.example, and
@@ -28,6 +29,8 @@
 .PARAMETER Start
   docker compose pull && up -d after updating the submodule, then import
   PKM pages/files/PDFs/bookmarks from disk without restarting PKM again.
+  Always runs Start-MarketPlugins afterwards (plugin backends on
+  homelab-backend, frontends on homelab-frontend).
 
 .EXAMPLE
   cd C:\Projects\homelab-deploy
@@ -262,6 +265,8 @@ $launcherNames = @(
   "Pull.sh",
   "Start-MarketPlugins.ps1",
   "Start-MarketPlugins.sh",
+  "Run-HomelabSite.ps1",
+  "Run-HomelabSite.sh",
   "Pull.ps1",
   "Pull.sh",
   "Pull-PkmDataKeepScripts.ps1",
@@ -456,3 +461,9 @@ if ($Start) {
 }
 
 Write-Host "Done."
+
+$plugins = Join-Path $siteRoot "Start-MarketPlugins.ps1"
+if (Test-Path -LiteralPath $plugins) {
+  Write-Host "Starting market plugins on homelab-backend / homelab-frontend..."
+  & $plugins -Ports $Ports
+}

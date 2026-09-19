@@ -115,6 +115,8 @@ LAUNCHERS=(
   Pull.ps1
   Start-MarketPlugins.sh
   Start-MarketPlugins.ps1
+  Run-HomelabSite.sh
+  Run-HomelabSite.ps1
   Pull.sh
   Pull.ps1
   Pull-PkmDataKeepScripts.sh
@@ -326,6 +328,13 @@ if [[ "$START" -eq 1 ]]; then
       echo "PKM disk reindex failed after Compose up. Use Import from disk in the PKM UI if items are missing." >&2
     fi
   fi
+fi
+
+plugins="$SITE_ROOT/Start-MarketPlugins.sh"
+if [[ -f "$plugins" ]]; then
+  echo "Starting market plugins on homelab-backend / homelab-frontend..."
+  chmod +x "$plugins" 2>/dev/null || true
+  HOMELAB_PORTS="$PORTS" /bin/bash "$plugins" || echo "Start-MarketPlugins did not fully succeed." >&2
 fi
 
 echo "Done."
