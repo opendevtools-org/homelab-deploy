@@ -32,8 +32,9 @@ start_named() {
   docker start "$1" >/dev/null 2>&1 || true
 }
 
-if ! exists pkm-backend; then
-  log "pkm-backend missing; running Compose backend up..."
+backend_up() {
+  local why="$1"
+  log "$why"
   if [[ -f upstream/docker-compose.backend.yml ]]; then
     docker compose --project-directory . \
       -f upstream/docker-compose.backend.yml \
@@ -49,6 +50,12 @@ if ! exists pkm-backend; then
       -f docker-compose.custom.yml \
       -f docker-compose.apps.yml up -d || true
   fi
+}
+
+if ! exists pkm-backend; then
+  backend_up "pkm-backend missing; running Compose backend up..."
+elif [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]] && ! exists homelab-guacamole; then
+  backend_up "homelab-guacamole missing; running Compose backend up..."
 fi
 
 if ! exists pkm-frontend; then

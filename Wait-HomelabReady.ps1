@@ -77,8 +77,9 @@ function Start-Named([string]$Name) {
   $ErrorActionPreference = $prev
 }
 
-if (-not (Test-ContainerExists "pkm-backend")) {
-  Write-Ts "pkm-backend missing; running Compose backend up..."
+function Invoke-BackendComposeUp {
+  param([string]$Reason)
+  Write-Ts $Reason
   $backendArgs = @("compose", "--project-directory", $siteRoot)
   $upstreamBe = Join-Path $siteRoot "upstream\docker-compose.backend.yml"
   if (Test-Path $upstreamBe) {
@@ -100,8 +101,15 @@ if (-not (Test-ContainerExists "pkm-backend")) {
   }
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  & docker @($backendArgs + @("up", "-d")) | Out-Null
+  & docker @($backendArgs + @("up", "-d"))
   $ErrorActionPreference = $prev
+}
+
+$guacCompose = Join-Path $siteRoot "data\hub\plugins\guacamole\docker-compose.backend.yml"
+if (-not (Test-ContainerExists "pkm-backend")) {
+  Invoke-BackendComposeUp "pkm-backend missing; running Compose backend up..."
+} elseif ((Test-Path -LiteralPath $guacCompose) -and -not (Test-ContainerExists "homelab-guacamole")) {
+  Invoke-BackendComposeUp "homelab-guacamole missing; running Compose backend up..."
 }
 
 if (-not (Test-ContainerExists "pkm-frontend")) {
