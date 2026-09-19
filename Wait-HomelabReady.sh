@@ -133,12 +133,21 @@ if exists homelab-guacamole; then
   }
   log "Waiting until Guacamole answers on :8080..."
   elapsed=0
+  restarted_db=0
   until guac_ok; do
     elapsed=$((elapsed + 5))
+    tail="$(docker logs --tail 8 homelab-guacamole 2>&1 || true)"
+    if [[ "$restarted_db" -eq 0 && "$elapsed" -ge 30 && "$tail" == *"waiting for DB"* ]]; then
+      log "Guacamole is waiting for embedded Postgres; restarting the container once..."
+      docker restart homelab-guacamole >/dev/null 2>&1 || true
+      sleep 3
+      docker network connect homelab_default homelab-guacamole >/dev/null 2>&1 || true
+      restarted_db=1
+    fi
     if (( elapsed % 30 == 0 )); then
       ips="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}} {{end}}' homelab-guacamole 2>/dev/null || true)"
       log "  still starting (${elapsed}s) ips=${ips}"
-      docker logs --tail 6 homelab-guacamole 2>&1 | while IFS= read -r line; do
+      printf '%s\n' "$tail" | while IFS= read -r line; do
         [[ -n "$line" ]] && log "    log: $line"
       done
     else

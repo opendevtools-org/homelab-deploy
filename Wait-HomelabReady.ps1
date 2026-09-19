@@ -247,13 +247,26 @@ if (Test-ContainerExists "homelab-guacamole") {
 
   Write-Ts "Waiting until Guacamole answers on :8080..."
   $elapsed = 0
+  $restartedDbWait = $false
   while (-not (Test-Guacamole)) {
     $elapsed += 5
+    $prev = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $tail = (& docker logs --tail 8 homelab-guacamole 2>&1 | Out-String)
+    $ErrorActionPreference = $prev
+    $waitingDb = $tail -match "waiting for DB"
+    if ($waitingDb -and -not $restartedDbWait -and $elapsed -ge 30) {
+      Write-Ts "Guacamole is waiting for embedded Postgres; restarting the container once..."
+      $ErrorActionPreference = "Continue"
+      & docker restart homelab-guacamole | Out-Null
+      Start-Sleep -Seconds 3
+      & docker network connect homelab_default homelab-guacamole 2>$null | Out-Null
+      $ErrorActionPreference = $prev
+      $restartedDbWait = $true
+    }
     if (($elapsed % 30) -eq 0) {
-      $prev = $ErrorActionPreference
       $ErrorActionPreference = "Continue"
       $ips = (& docker inspect -f "{{range.NetworkSettings.Networks}}{{.IPAddress}}({{.NetworkID}}) {{end}}" homelab-guacamole 2>$null)
-      $tail = (& docker logs --tail 6 homelab-guacamole 2>&1 | Out-String)
       $ErrorActionPreference = $prev
       Write-Ts ("  still starting ({0}s) ips={1}" -f $elapsed, ([string]$ips).Trim())
       foreach ($line in ($tail -split "`r?`n")) {
