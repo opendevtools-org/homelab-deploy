@@ -1,31 +1,31 @@
 #!/usr/bin/env bash
-# Full site refresh: Update-HomelabUpstream --start (includes Start-MarketPlugins),
-# then Pull-DataGit.
+# Full site refresh:
+#   1. Update-HomelabUpstream --start --commit --push (includes Start-MarketPlugins)
+#   2. Pull-DataGit (commit, pull, merge conflicts, push)
 #
 # Usage (site root or upstream/):
 #   ./Run-HomelabSite.sh
-#   ./Run-HomelabSite.sh --commit --push
-#   ./Run-HomelabSite.sh --no-start --skip-data-pull
+#   ./Run-HomelabSite.sh --no-start
+#   ./Run-HomelabSite.sh --no-git --skip-data-pull
 set -euo pipefail
 
 PORTS="lan"
-COMMIT=0
-PUSH=0
 START=1
+GIT=1
 SKIP_DATA=0
 
 usage() {
-  echo "Usage: $0 [--ports lan|local] [--commit] [--push] [--no-start] [--skip-data-pull]"
+  echo "Usage: $0 [--ports lan|local] [--no-start] [--no-git] [--skip-data-pull]"
   exit "${1:-0}"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --ports) PORTS="$2"; shift 2 ;;
-    --commit) COMMIT=1; shift ;;
-    --push) PUSH=1; COMMIT=1; shift ;;
     --no-start) START=0; shift ;;
+    --no-git) GIT=0; shift ;;
     --skip-data-pull) SKIP_DATA=1; shift ;;
+    --commit|--push) shift ;;
     -h|--help) usage 0 ;;
     *) echo "Unknown option: $1" >&2; usage 1 ;;
   esac
@@ -53,11 +53,12 @@ upd="$SITE_ROOT/Update-HomelabUpstream.sh"
 [[ -f "$upd" ]] || { echo "Update-HomelabUpstream.sh not found" >&2; exit 1; }
 
 args=(--ports "$PORTS")
-[[ "$COMMIT" -eq 1 ]] && args+=(--commit)
-[[ "$PUSH" -eq 1 ]] && args+=(--push)
 [[ "$START" -eq 1 ]] && args+=(--start)
+if [[ "$GIT" -eq 1 ]]; then
+  args+=(--commit --push)
+fi
 
-echo "=== 1/2 Update-HomelabUpstream (includes Start-MarketPlugins) ==="
+echo "=== 1/2 Update-HomelabUpstream (Compose, plugins, git commit/pull/merge/push) ==="
 chmod +x "$upd" 2>/dev/null || true
 /bin/bash "$upd" "${args[@]}"
 
@@ -70,6 +71,6 @@ pull="$SITE_ROOT/Pull-DataGit.sh"
 [[ -f "$pull" ]] || pull="$SITE_ROOT/upstream/Pull-DataGit.sh"
 [[ -f "$pull" ]] || { echo "Pull-DataGit.sh not found" >&2; exit 1; }
 
-echo "=== 2/2 Pull-DataGit ==="
+echo "=== 2/2 Pull-DataGit (commit data, pull, merge conflicts, push) ==="
 chmod +x "$pull" 2>/dev/null || true
 exec /bin/bash "$pull"

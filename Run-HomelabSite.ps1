@@ -1,23 +1,24 @@
 <#
 .SYNOPSIS
-  Full site refresh: product update, Compose, market plugins, then data Git pull.
+  Full site refresh: product update, Compose, plugins, then Git commit/pull/merge/push of site data.
 
 .DESCRIPTION
-  1. Update-HomelabUpstream -Start (refreshes upstream/, compose up, PKM import)
-     which also runs Start-MarketPlugins
-  2. Pull-DataGit (commit/sync site data with origin)
+  1. Update-HomelabUpstream -Start -Commit -Push
+     (upstream/, Compose, Start-MarketPlugins, commit pointer, pull/merge origin, push)
+  2. Pull-DataGit
+     (commit data + launchers, pull --rebase then merge, SQLite/file conflicts, push)
 
 .EXAMPLE
   .\Run-HomelabSite.ps1
-  .\Run-HomelabSite.ps1 -Commit -Push
+  .\Run-HomelabSite.ps1 -NoStart
+  .\Run-HomelabSite.ps1 -NoGit
 #>
 [CmdletBinding()]
 param(
   [ValidateSet("lan", "local")]
   [string]$Ports = "lan",
-  [switch]$Commit,
-  [switch]$Push,
   [switch]$NoStart,
+  [switch]$NoGit,
   [switch]$SkipDataPull
 )
 
@@ -52,11 +53,13 @@ if (-not (Test-Path $upd)) {
 }
 
 $upArgs = @{ Ports = $Ports }
-if ($Commit) { $upArgs["Commit"] = $true }
-if ($Push) { $upArgs["Push"] = $true }
 if (-not $NoStart) { $upArgs["Start"] = $true }
+if (-not $NoGit) {
+  $upArgs["Commit"] = $true
+  $upArgs["Push"] = $true
+}
 
-Write-Host "=== 1/2 Update-HomelabUpstream (includes Start-MarketPlugins) ==="
+Write-Host "=== 1/2 Update-HomelabUpstream (Compose, plugins, git commit/pull/merge/push) ==="
 & $upd @upArgs
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -73,6 +76,6 @@ if (-not (Test-Path $pull)) {
   throw "Pull-DataGit.ps1 not found."
 }
 
-Write-Host "=== 2/2 Pull-DataGit ==="
+Write-Host "=== 2/2 Pull-DataGit (commit data, pull, merge conflicts, push) ==="
 & $pull
 exit $LASTEXITCODE

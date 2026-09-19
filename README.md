@@ -289,22 +289,20 @@ No flags: only `git pull` in `upstream/`.
 
 ### Full refresh — `Run-HomelabSite`
 
-Runs the usual site sequence in order:
+Runs the usual site sequence in order, including Git (commit, pull, merge conflicts, push):
 
-1. `Update-HomelabUpstream -Start` (product + Compose + `Start-MarketPlugins`)
-2. `Pull-DataGit` (data sync with origin)
+1. `Update-HomelabUpstream -Start -Commit -Push` (product + Compose + `Start-MarketPlugins` + git on the site repo / `upstream` pointer)
+2. `Pull-DataGit` (commit `data/` and launchers, pull with rebase then merge, SQLite/file conflict helpers, push)
 
 ```bash
 ./Run-HomelabSite.sh
-./Run-HomelabSite.sh --commit --push
 ```
 
 ```powershell
 .\Run-HomelabSite.ps1
-.\Run-HomelabSite.ps1 -Commit -Push
 ```
 
-`--no-start` / `-NoStart` skips Compose up. `--skip-data-pull` / `-SkipDataPull` skips `Pull-DataGit`.
+`--no-start` / `-NoStart` skips Compose up. `--no-git` / `-NoGit` skips commit/push on the product update (step 2 still runs `Pull-DataGit` unless `--skip-data-pull` / `-SkipDataPull`).
 
 ### Daily data backup — `Backup-DataGit`
 
