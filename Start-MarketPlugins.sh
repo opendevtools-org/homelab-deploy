@@ -140,7 +140,7 @@ if [[ "$want_be" -eq 1 ]]; then
   if ! run_logged "${be[@]}" up -d; then
     log "Could not start homelab-backend with market plugins."
   else
-    run_logged "${be[@]}" rm --force --stop || true
+    run_logged "${be[@]}" rm --force || true
     ids="$(docker ps -aq --filter label=homelab.config-job=true --filter status=exited 2>/dev/null || true)"
     if [[ -n "$ids" ]]; then
       # shellcheck disable=SC2086

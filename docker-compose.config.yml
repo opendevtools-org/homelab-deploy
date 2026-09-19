@@ -2,9 +2,9 @@
 # Include after the base compose and network overlay, before
 # docker-compose.custom.yml and docker-compose.apps.yml.
 #
-# After `up`, launchers run `docker compose rm --force --stop` with no
-# service names so every stopped one-shot in homelab-backend is removed
-# (permissions jobs and any site busybox init in custom.yml).
+# After `up`, launchers run `docker compose rm --force` (no --stop, no
+# service names) so only already-exited one-shots are removed. --stop
+# would halt pkm-backend and hub-platform too.
 #
 # Include with the backend project only (not with docker-compose.frontend.yml).
 # Flat:

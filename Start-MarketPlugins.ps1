@@ -165,7 +165,7 @@ if ($wantBackend) {
   if ($code -ne 0) {
     Write-PluginLog "Could not start homelab-backend with market plugins."
   } else {
-    $null = Invoke-LoggedDocker ($backendArgs + @("rm", "--force", "--stop"))
+    $null = Invoke-LoggedDocker ($backendArgs + @("rm", "--force"))
     $gone = & docker ps -aq --filter "label=homelab.config-job=true" --filter "status=exited" 2>$null
     if ($gone) {
       $null = Invoke-LoggedDocker (@("rm", "-f") + @($gone))
