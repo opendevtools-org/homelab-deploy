@@ -132,17 +132,18 @@ if exists homelab-guacamole; then
     [[ "$code" =~ ^[1-4][0-9][0-9]$ ]]
   }
   guac_ok() {
-    http_up http://127.0.0.1:8080/guacamole/ && return 0
-    http_up http://127.0.0.1:8080/ && return 0
+    docker exec home-hub-platform python -c "import socket; socket.create_connection(('homelab-guacamole', 8080), 2).close()" >/dev/null 2>&1 && return 0
     local ip
     ip="$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}} {{end}}' homelab-guacamole 2>/dev/null | awk '{print $1}')"
     if [[ -n "$ip" ]]; then
       docker exec home-hub-platform python -c "import socket; socket.create_connection(('$ip', 8080), 2).close()" >/dev/null 2>&1 \
         && return 0
     fi
-    docker exec home-hub-platform python -c "import socket; socket.create_connection(('homelab-guacamole', 8080), 2).close()" >/dev/null 2>&1
+    http_up http://127.0.0.1:8080/guacamole/ && return 0
+    http_up http://127.0.0.1:8080/ && return 0
+    return 1
   }
-  log "Waiting until Guacamole answers on :8080..."
+  log "Waiting until Guacamole answers on the Docker network (:8080 in-container)..."
   elapsed=0
   restarted_db=0
   until guac_ok; do

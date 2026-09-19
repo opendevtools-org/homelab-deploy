@@ -203,7 +203,6 @@ if [[ -f "$UPSTREAM_GITIGNORE" ]]; then
 fi
 
 if [[ -f "$UPSTREAM/Refresh-SiteProductTrees.sh" ]]; then
-  chmod +x "$UPSTREAM/Refresh-SiteProductTrees.sh" 2>/dev/null || true
   /bin/bash "$UPSTREAM/Refresh-SiteProductTrees.sh" "$UPSTREAM" "$SITE_ROOT"
   log "Copied scriptkit/, agent-context/, docker examples onto the site root."
 else
@@ -229,27 +228,78 @@ https_overlay_enabled() {
 
 if [[ "$COMMIT" -eq 1 ]]; then
   [[ -d "$SITE_ROOT/.git" ]] || { log "No .git in site root" >&2; exit 1; }
+  git -C "$UPSTREAM" reset --hard HEAD >/dev/null 2>&1 || true
   git add upstream
   for s in "${LAUNCHERS[@]}"; do
     [[ -f "$s" ]] && git add "$s" || true
   done
   git add .gitignore .gitignore.custom .gitignore.upstream 2>/dev/null || true
   git add scriptkit agent-context docker docker-compose.custom.example.yml docker-compose.apps.example.yml 2>/dev/null || true
-  if [[ -n "$(git status --porcelain -- upstream .gitignore .gitignore.custom .gitignore.upstream scriptkit agent-context docker docker-compose.custom.example.yml docker-compose.apps.example.yml "${LAUNCHERS[@]}" 2>/dev/null || true)" ]]; then
+  if git diff --cached --quiet; then
+    log "Upstream pointer unchanged; nothing to commit."
+  else
     git commit -m "Bump homelab-deploy upstream (${REV})."
     log "Committed submodule pointer."
-  else
-    log "Upstream pointer unchanged; nothing to commit."
   fi
 fi
+
+resolve_unmerged_from_upstream() {
+  local path
+  local -a unmerged=()
+  mapfile -t unmerged < <(git diff --name-only --diff-filter=U 2>/dev/null || true)
+  ((${#unmerged[@]})) || return 0
+  for path in "${unmerged[@]}"; do
+    [[ -n "$path" ]] || continue
+    if [[ "$path" == "upstream" || "$path" == "upstream/" ]]; then
+      git add -- upstream
+      log "Conflict $path: kept submodule after product pull."
+      continue
+    fi
+    if [[ -f "$UPSTREAM/$path" ]]; then
+      cp -a "$UPSTREAM/$path" "$SITE_ROOT/$path"
+      git add -- "$path"
+      log "Conflict $path: kept copy from upstream/."
+      continue
+    fi
+    if git checkout --theirs -- "$path" 2>/dev/null; then
+      git add -- "$path"
+      log "Conflict $path: kept incoming git version."
+    elif git checkout --ours -- "$path" 2>/dev/null; then
+      git add -- "$path"
+    fi
+  done
+}
 
 if [[ "$PUSH" -eq 1 ]]; then
   branch="$(git rev-parse --abbrev-ref HEAD)"
   [[ -n "$branch" && "$branch" != "HEAD" ]] || { log "Detached HEAD is not supported for --push." >&2; exit 1; }
   git fetch origin
-  if ! git pull --rebase --autostash origin "$branch"; then
-    git rebase --abort >/dev/null 2>&1 || true
-    git merge --no-edit "origin/$branch"
+  set +e
+  git pull --rebase --autostash origin "$branch"
+  pull_rc=$?
+  set -e
+  if [[ "$pull_rc" -ne 0 ]]; then
+    resolve_unmerged_from_upstream
+    if [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; then
+      set +e
+      GIT_EDITOR=true git rebase --continue
+      set -e
+    fi
+    if [[ -d .git/rebase-merge || -d .git/rebase-apply ]] || git diff --name-only --diff-filter=U | grep -q .; then
+      git rebase --abort >/dev/null 2>&1 || true
+      set +e
+      git merge --no-edit "origin/$branch"
+      merge_rc=$?
+      set -e
+      if [[ "$merge_rc" -ne 0 ]]; then
+        resolve_unmerged_from_upstream
+        if git diff --name-only --diff-filter=U | grep -q .; then
+          log "Could not resolve remaining git conflicts automatically." >&2
+          exit 1
+        fi
+        git commit --no-edit
+      fi
+    fi
   fi
   git push origin "$branch"
   log "Pushed."

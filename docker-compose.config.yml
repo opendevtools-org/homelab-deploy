@@ -105,6 +105,9 @@ services:
 
   guacamole:
     profiles: [guacamole]
+    # Hub reaches Guacamole on the Docker network. Publishing host :8080
+    # fails when that port is already taken (typical on Linux).
+    ports: !reset []
     pull_policy: missing
     environment:
       EXTENSIONS: auth-header

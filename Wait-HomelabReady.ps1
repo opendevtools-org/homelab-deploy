@@ -242,8 +242,7 @@ if (Test-ContainerExists "homelab-guacamole") {
   }
 
   function Test-Guacamole {
-    if (Test-HttpUrl "http://127.0.0.1:8080/guacamole/") { return $true }
-    if (Test-HttpUrl "http://127.0.0.1:8080/") { return $true }
+    if (Test-GuacamoleTcp "homelab-guacamole" 8080) { return $true }
     $prev = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     $raw = (& docker inspect -f "{{range.NetworkSettings.Networks}}{{.IPAddress}} {{end}}" homelab-guacamole 2>$null | Select-Object -Last 1)
@@ -253,11 +252,12 @@ if (Test-ContainerExists "homelab-guacamole") {
     foreach ($ip in $ips) {
       if (Test-GuacamoleTcp $ip 8080) { return $true }
     }
-    if (Test-GuacamoleTcp "homelab-guacamole" 8080) { return $true }
+    if (Test-HttpUrl "http://127.0.0.1:8080/guacamole/") { return $true }
+    if (Test-HttpUrl "http://127.0.0.1:8080/") { return $true }
     return $false
   }
 
-  Write-Ts "Waiting until Guacamole answers on :8080..."
+  Write-Ts "Waiting until Guacamole answers on the Docker network (:8080 in-container)..."
   $elapsed = 0
   $restartedDbWait = $false
   while (-not (Test-Guacamole)) {

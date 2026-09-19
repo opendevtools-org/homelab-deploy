@@ -341,6 +341,10 @@ if ($Commit) {
   if (-not (Test-Path (Join-Path $siteRoot ".git"))) {
     throw "No .git in site root; cannot commit submodule pointer."
   }
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & git -C $upstream reset --hard HEAD 2>&1 | Out-Null
+  $ErrorActionPreference = $prev
   Invoke-Git add upstream | Out-Null
   foreach ($name in $launcherNames) {
     if (Test-Path (Join-Path $siteRoot $name)) {
@@ -352,16 +356,48 @@ if ($Commit) {
       Invoke-Git add $name | Out-Null
     }
   }
-  $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  $statusArgs = @("status", "--porcelain", "--", "upstream", ".gitignore", ".gitignore.custom", ".gitignore.upstream", "scriptkit", "agent-context", "docker", "docker-compose.custom.example.yml", "docker-compose.apps.example.yml") + $launcherNames
-  $porcelain = & git @statusArgs 2>&1
+  & git diff --cached --quiet
+  $cachedEmpty = ($LASTEXITCODE -eq 0)
   $ErrorActionPreference = $prev
-  if ($porcelain) {
+  if ($cachedEmpty) {
+    Write-Ts "Upstream pointer unchanged; nothing to commit."
+  } else {
     Invoke-Git commit -m ("Bump homelab-deploy upstream ({0})." -f $rev) | Out-Null
     Write-Ts "Committed submodule pointer."
-  } else {
-    Write-Ts "Upstream pointer unchanged; nothing to commit."
+  }
+}
+
+function Resolve-UnmergedFromUpstream {
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $unmerged = @(& git diff --name-only --diff-filter=U 2>$null)
+  $ErrorActionPreference = $prev
+  foreach ($path in $unmerged) {
+    if ([string]::IsNullOrWhiteSpace($path)) { continue }
+    if ($path -eq "upstream" -or $path -eq "upstream/") {
+      Invoke-Git add -- upstream | Out-Null
+      Write-Ts ("Conflict {0}: kept submodule after product pull." -f $path)
+      continue
+    }
+    $fromUp = Join-Path $upstream $path
+    $dest = Join-Path $siteRoot $path
+    if (Test-Path -LiteralPath $fromUp) {
+      Copy-Item -Force $fromUp $dest
+      Invoke-Git add -- $path | Out-Null
+      Write-Ts ("Conflict {0}: kept copy from upstream/." -f $path)
+      continue
+    }
+    $ErrorActionPreference = "Continue"
+    & git checkout --theirs -- $path 2>&1 | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+      Invoke-Git add -- $path | Out-Null
+      Write-Ts ("Conflict {0}: kept incoming git version." -f $path)
+    } else {
+      & git checkout --ours -- $path 2>&1 | Out-Null
+      if ($LASTEXITCODE -eq 0) { Invoke-Git add -- $path | Out-Null }
+    }
+    $ErrorActionPreference = $prev
   }
 }
 
@@ -371,17 +407,42 @@ if ($Push) {
     throw "Detached HEAD is not supported for -Push."
   }
   Invoke-Git fetch origin | Out-Null
-  try {
-    Invoke-Git pull --rebase --autostash origin $branch | Out-Null
-  } catch {
-    $prev = $ErrorActionPreference
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  & git pull --rebase --autostash origin $branch
+  $pullCode = $LASTEXITCODE
+  $ErrorActionPreference = $prev
+  if ($pullCode -ne 0) {
+    Resolve-UnmergedFromUpstream
+    $rebaseDir = Join-Path $siteRoot ".git\rebase-merge"
+    $rebaseApply = Join-Path $siteRoot ".git\rebase-apply"
+    if ((Test-Path $rebaseDir) -or (Test-Path $rebaseApply)) {
+      $ErrorActionPreference = "Continue"
+      $env:GIT_EDITOR = "true"
+      & git rebase --continue
+      Remove-Item Env:GIT_EDITOR -ErrorAction SilentlyContinue
+      $ErrorActionPreference = $prev
+    }
+    $stillRebase = (Test-Path $rebaseDir) -or (Test-Path $rebaseApply)
     $ErrorActionPreference = "Continue"
-    & git rebase --abort 2>&1 | Out-Null
+    $stillU = @(& git diff --name-only --diff-filter=U 2>$null)
     $ErrorActionPreference = $prev
-    try {
-      Invoke-Git merge --no-edit ("origin/{0}" -f $branch) | Out-Null
-    } catch {
-      throw ("Could not integrate origin/{0} (rebase and merge failed). Resolve conflicts, then git push and re-run with -Start." -f $branch)
+    if ($stillRebase -or $stillU) {
+      $ErrorActionPreference = "Continue"
+      & git rebase --abort 2>&1 | Out-Null
+      & git merge --no-edit ("origin/{0}" -f $branch)
+      $mergeCode = $LASTEXITCODE
+      $ErrorActionPreference = $prev
+      if ($mergeCode -ne 0) {
+        Resolve-UnmergedFromUpstream
+        $ErrorActionPreference = "Continue"
+        $left = @(& git diff --name-only --diff-filter=U 2>$null)
+        $ErrorActionPreference = $prev
+        if ($left) {
+          throw ("Could not resolve remaining git conflicts: {0}" -f ($left -join ", "))
+        }
+        Invoke-Git commit --no-edit | Out-Null
+      }
     }
   }
   Invoke-Git push origin $branch | Out-Null
