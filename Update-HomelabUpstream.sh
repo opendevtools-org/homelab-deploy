@@ -281,21 +281,29 @@ if [[ "$START" -eq 1 ]]; then
     rm --force --stop pkm-data-permissions site-cli-volumes-permissions >/dev/null 2>&1 || true
   if https_overlay_enabled; then
     echo "LAN HTTPS overlay (Caddy) enabled."
+    extra_fe=()
+    [[ -f docker-compose.frontend.apps.yml ]] && extra_fe+=(-f docker-compose.frontend.apps.yml)
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
       -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${extra_fe[@]}" \
       -f docker-compose.https.yml pull
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
       -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${extra_fe[@]}" \
       -f docker-compose.https.yml up -d
   else
+    extra_fe=()
+    [[ -f docker-compose.frontend.apps.yml ]] && extra_fe+=(-f docker-compose.frontend.apps.yml)
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
-      -f "upstream/$FRONTEND_PORTS_FILE" pull
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${extra_fe[@]}" pull
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
-      -f "upstream/$FRONTEND_PORTS_FILE" up -d
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${extra_fe[@]}" up -d
   fi
   echo "Compose up done."
 

@@ -1,9 +1,13 @@
 <#
 .SYNOPSIS
-  Start Market plugin Compose stacks from data/hub/plugins/ after a git pull.
+  Attach Market plugins to the homelab-backend and homelab-frontend Compose projects.
 #>
 [CmdletBinding()]
-param()
+param(
+  [ValidateSet("lan", "local")]
+  [string]$Ports = "lan"
+)
+
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
@@ -14,53 +18,128 @@ if ((Split-Path -Leaf $here) -eq "upstream" -and (Test-Path (Join-Path (Split-Pa
 }
 $root = Join-Path $siteRoot "data\hub\plugins"
 if (-not (Test-Path $root)) { return }
-
 if (-not (Get-Command docker -ErrorAction SilentlyContinue)) { return }
 
-$hubNet = $null
-foreach ($n in @("homelab_default", "hub_default")) {
-  docker network inspect $n 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) { $hubNet = $n; break }
+$portsFile = if ($Ports -eq "local") { "docker-compose.local.yml" } else { "docker-compose.lan.yml" }
+$frontendPortsFile = if ($Ports -eq "local") { "docker-compose.frontend.local.yml" } else { "docker-compose.frontend.lan.yml" }
+
+function ConvertTo-ComposeRel([string]$Full) {
+  $rel = $Full.Substring($siteRoot.Length).TrimStart('\', '/')
+  return ($rel -replace '\\', '/')
 }
 
-$started = $false
+function Add-ComposeInclude {
+  param([string]$OverlayPath, [string]$ComposeFile, [string]$ProjectDir)
+  $composeRel = ConvertTo-ComposeRel $ComposeFile
+  $projectRel = ConvertTo-ComposeRel $ProjectDir
+  if (-not (Test-Path -LiteralPath $OverlayPath)) {
+    $dir = Split-Path -Parent $OverlayPath
+    if ($dir -and -not (Test-Path $dir)) {
+      New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    }
+    $seed = @"
+include:
+  - path: $composeRel
+    project_directory: $projectRel
+
+services: {}
+"@
+    [IO.File]::WriteAllText($OverlayPath, $seed.Replace("`n", "`n"))
+    return
+  }
+  $text = [IO.File]::ReadAllText($OverlayPath)
+  if ($text.Contains($composeRel)) { return }
+  $item = "  - path: $composeRel`n    project_directory: $projectRel`n"
+  if ($text -match '(?m)^include:\s*\r?\n') {
+    $text = [regex]::Replace($text, '(?m)^include:\s*\r?\n', "include:`n$item", 1)
+  } else {
+    $text = "include:`n$item`n$text"
+  }
+  [IO.File]::WriteAllText($OverlayPath, $text)
+}
+
+$appsOverlay = Join-Path $siteRoot "docker-compose.apps.yml"
+$feAppsOverlay = Join-Path $siteRoot "docker-compose.frontend.apps.yml"
+$wantBackend = $false
+$wantFrontend = $false
+
 Get-ChildItem -Directory $root | ForEach-Object {
   $id = $_.Name
   if ($id -notmatch '^[a-z0-9][a-z0-9_-]*$') { return }
-  $compose = $null
-  foreach ($f in @("docker-compose.backend.yml", "docker-compose.yml")) {
-    $candidate = Join-Path $_.FullName $f
-    if (Test-Path -LiteralPath $candidate) { $compose = $candidate; break }
-  }
-  if (-not $compose) { return }
-  $cmd = @(
-    "compose", "--project-directory", $_.FullName,
-    "--project-name", "homelab-plugin-$id", "-f", $compose
-  )
-  $ov = Join-Path $_.FullName "docker-compose.hub-override.yml"
-  if (Test-Path -LiteralPath $ov) { $cmd += @("-f", $ov) }
-  $cmd += @("up", "-d")
+
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  & docker @cmd
-  $ok = $LASTEXITCODE -eq 0
+  & docker compose --project-name ("homelab-plugin-{0}" -f $id) down 2>$null | Out-Null
   $ErrorActionPreference = $prev
-  if (-not $ok) {
-    Write-Host "Could not start market plugin $id."
-    return
+
+  $backend = $null
+  foreach ($f in @("docker-compose.backend.yml", "docker-compose.yml")) {
+    $candidate = Join-Path $_.FullName $f
+    if (Test-Path -LiteralPath $candidate) { $backend = $candidate; break }
   }
-  $started = $true
-  Write-Host "Started market plugin $id."
-  if ($hubNet) {
-    $ErrorActionPreference = "Continue"
-    docker network connect $hubNet "homelab-$id" 2>$null | Out-Null
-    $ErrorActionPreference = $prev
+  $frontend = Join-Path $_.FullName "docker-compose.frontend.yml"
+  if ($backend) {
+    Add-ComposeInclude -OverlayPath $appsOverlay -ComposeFile $backend -ProjectDir $_.FullName
+    $wantBackend = $true
+    Write-Host ("Plugin {0}: backend attached to homelab-backend." -f $id)
+  }
+  if (Test-Path -LiteralPath $frontend) {
+    Add-ComposeInclude -OverlayPath $feAppsOverlay -ComposeFile $frontend -ProjectDir $_.FullName
+    $wantFrontend = $true
+    Write-Host ("Plugin {0}: frontend attached to homelab-frontend." -f $id)
   }
 }
 
-if ($started) {
-  $prev = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  docker restart home-hub-platform 2>$null | Out-Null
-  $ErrorActionPreference = $prev
+Set-Location $siteRoot
+$prev = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+
+if ($wantBackend) {
+  $backendArgs = @("compose", "--project-directory", $siteRoot)
+  $upstreamBe = Join-Path $siteRoot "upstream\docker-compose.backend.yml"
+  if (Test-Path $upstreamBe) {
+    $backendArgs += @(
+      "-f", "upstream/docker-compose.backend.yml",
+      "-f", ("upstream/{0}" -f $portsFile),
+      "-f", "docker-compose.config.yml",
+      "-f", "docker-compose.custom.yml",
+      "-f", "docker-compose.apps.yml"
+    )
+  } else {
+    $backendArgs += @(
+      "-f", "docker-compose.backend.yml",
+      "-f", $portsFile,
+      "-f", "docker-compose.config.yml",
+      "-f", "docker-compose.custom.yml",
+      "-f", "docker-compose.apps.yml"
+    )
+  }
+  $cmd = $backendArgs + @("up", "-d")
+  & docker @cmd
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "Could not start homelab-backend with market plugins."
+  }
 }
+
+if ($wantFrontend) {
+  $frontendArgs = @("compose", "--project-directory", $siteRoot)
+  $upstreamFe = Join-Path $siteRoot "upstream\docker-compose.frontend.yml"
+  if (Test-Path $upstreamFe) {
+    $frontendArgs += @(
+      "-f", "upstream/docker-compose.frontend.yml",
+      "-f", ("upstream/{0}" -f $frontendPortsFile)
+    )
+  } else {
+    $frontendArgs += @("-f", "docker-compose.frontend.yml", "-f", $frontendPortsFile)
+  }
+  if (Test-Path $feAppsOverlay) {
+    $frontendArgs += @("-f", "docker-compose.frontend.apps.yml")
+  }
+  $cmd = $frontendArgs + @("up", "-d")
+  & docker @cmd
+  if ($LASTEXITCODE -ne 0) {
+    Write-Host "Could not start homelab-frontend with market plugins."
+  }
+}
+
+$ErrorActionPreference = $prev

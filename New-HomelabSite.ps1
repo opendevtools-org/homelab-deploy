@@ -490,6 +490,18 @@ if (Test-Path (Join-Path $bak "docker-compose.apps.yml")) {
 services: {}
 "@
 }
+if (-not (Test-Path (Join-Path $TargetDir "docker-compose.frontend.apps.yml"))) {
+  if (Test-Path (Join-Path $bak "docker-compose.frontend.apps.yml")) {
+    Copy-Item (Join-Path $bak "docker-compose.frontend.apps.yml") (Join-Path $TargetDir "docker-compose.frontend.apps.yml") -Force
+  } elseif (Test-Path (Join-Path $TargetDir "upstream\docker-compose.frontend.apps.yml")) {
+    Copy-Item (Join-Path $TargetDir "upstream\docker-compose.frontend.apps.yml") (Join-Path $TargetDir "docker-compose.frontend.apps.yml") -Force
+  } else {
+    Write-Utf8NoBom (Join-Path $TargetDir "docker-compose.frontend.apps.yml") @"
+# Optional extra frontends for this host.
+services: {}
+"@
+  }
+}
 if (Test-Path (Join-Path $bak "docker-compose.custom.yml")) {
   Copy-Item (Join-Path $bak "docker-compose.custom.yml") (Join-Path $TargetDir "docker-compose.custom.yml") -Force
 } elseif (Test-Path (Join-Path $TargetDir "upstream\docker-compose.custom.yml")) {

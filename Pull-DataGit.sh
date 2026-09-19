@@ -10,7 +10,7 @@ NOTIFY_WEBHOOK_URL="${HOMELAB_BACKUP_NOTIFY_WEBHOOK_URL:-}"
 SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 NOTIFICATION_LOG="${HOMELAB_PULL_LOG:-$SCRIPT_ROOT/logs/pull-data-git.log}"
 BACKUP_PATHS=(
-  data docker-compose.custom.yml docker-compose.apps.yml README.md overrides
+  data docker-compose.custom.yml docker-compose.apps.yml docker-compose.frontend.apps.yml README.md overrides
   upstream
   .gitignore .gitignore.custom .gitignore.upstream
   scriptkit agent-context docker

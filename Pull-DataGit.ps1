@@ -43,7 +43,7 @@ $productSyncPaths = @(
   "Caddyfile", "README.site.md"
 )
 $backupPaths = @(
-  "data", "docker-compose.custom.yml", "docker-compose.apps.yml", "README.md", "overrides"
+  "data", "docker-compose.custom.yml", "docker-compose.apps.yml", "docker-compose.frontend.apps.yml", "README.md", "overrides"
 ) + $productSyncPaths
 $excludePathspec = ":(exclude)data/pkm/scripts/**/.uploads/**"
 $sqliteMergeHelper = Join-Path $PSScriptRoot "Merge-SqliteGitConflict.py"

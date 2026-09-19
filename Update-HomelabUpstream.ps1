@@ -420,6 +420,9 @@ if ($Start) {
       "-f", "upstream/docker-compose.frontend.yml",
       "-f", ("upstream/{0}" -f $frontendPortsFile)
     )
+    if (Test-Path (Join-Path $siteRoot "docker-compose.frontend.apps.yml")) {
+      $frontendComposeArgs += @("-f", "docker-compose.frontend.apps.yml")
+    }
     if (Test-HttpsOverlayEnabled) {
       Write-Host "LAN HTTPS overlay (Caddy) enabled."
       $frontendComposeArgs += @("-f", "docker-compose.https.yml")

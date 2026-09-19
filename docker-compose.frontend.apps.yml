@@ -1,0 +1,9 @@
+# Extra WEB CLIENTS for this host (Market plugin frontends). Empty by default.
+# Always included with the base frontend compose when the file exists.
+# Site-owned: Update-HomelabUpstream does not overwrite this file.
+#
+# include:
+#   - path: data/hub/plugins/example/docker-compose.frontend.yml
+#     project_directory: data/hub/plugins/example
+
+services: {}
