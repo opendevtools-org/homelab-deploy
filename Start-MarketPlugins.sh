@@ -149,20 +149,18 @@ if [[ "$want_be" -eq 1 ]]; then
   fi
 fi
 
-if [[ "$want_fe" -eq 1 ]]; then
-  if [[ -f upstream/docker-compose.frontend.yml ]]; then
-    args=(docker compose --project-directory . \
-      -f upstream/docker-compose.frontend.yml \
-      -f "upstream/$FRONTEND_PORTS_FILE")
-  else
-    args=(docker compose -f docker-compose.frontend.yml -f "$FRONTEND_PORTS_FILE")
-  fi
-  if [[ -f "$FE_APPS" ]]; then
-    args+=(-f docker-compose.frontend.apps.yml)
-  fi
-  if ! run_logged "${args[@]}" up -d; then
-    log "Could not start homelab-frontend with market plugins."
-  fi
+if [[ -f upstream/docker-compose.frontend.yml ]]; then
+  args=(docker compose --project-directory . \
+    -f upstream/docker-compose.frontend.yml \
+    -f "upstream/$FRONTEND_PORTS_FILE")
+else
+  args=(docker compose -f docker-compose.frontend.yml -f "$FRONTEND_PORTS_FILE")
+fi
+if [[ -f "$FE_APPS" ]]; then
+  args+=(-f docker-compose.frontend.apps.yml)
+fi
+if ! run_logged "${args[@]}" up -d; then
+  log "Could not start homelab-frontend with market plugins."
 fi
 
 log "Start-MarketPlugins finished."

@@ -599,6 +599,14 @@ try {
   } elseif (Test-Path $startPlugins) {
     & $startPlugins
   }
+  $waitReady = Join-Path $repoRoot "Wait-HomelabReady.ps1"
+  if (Test-Path -LiteralPath $waitReady) {
+    Write-Host "Waiting until PKM API and web UI are ready..."
+    & $waitReady
+    if ($LASTEXITCODE -ne 0) {
+      throw "Hub/PKM not ready after pull (PKM API or nginx 502)."
+    }
+  }
   Set-SqliteSkipWorktree -Enable $true
 } catch {
   $err = "Pull failed: {0}" -f $_.Exception.Message

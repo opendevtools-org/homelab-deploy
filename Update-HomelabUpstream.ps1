@@ -8,7 +8,7 @@
 
   After pull, refreshes site-root launchers from upstream/:
     Update-HomelabUpstream.*, Backup-DataGit.*, Pull-DataGit.*, Pull-PkmDataKeepScripts.*,
-    Start-MarketPlugins.*, Collect-HomelabDiag.*, Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
+    Start-MarketPlugins.*, Wait-HomelabReady.*, Collect-HomelabDiag.*, Register-DataGitBackup*, Register-DataGitPull*, Reindex-PkmFromDisk.*,
     Run-HomelabSite.*,
     docker-compose.config.yml, docker-compose.https.yml, Caddyfile,
     README.site.md, the layered gitignore files, scriptkit/,
@@ -29,8 +29,8 @@
 .PARAMETER Start
   docker compose pull && up -d after updating the submodule, then import
   PKM pages/files/PDFs/bookmarks from disk without restarting PKM again.
-  Always runs Start-MarketPlugins afterwards (plugin backends on
-  homelab-backend, frontends on homelab-frontend).
+  Always runs Start-MarketPlugins afterwards, then Wait-HomelabReady
+  (PKM API healthy and nginx can proxy — no leftover 502).
 
 .EXAMPLE
   cd C:\Projects\homelab-deploy
@@ -265,6 +265,8 @@ $launcherNames = @(
   "Pull.sh",
   "Start-MarketPlugins.ps1",
   "Start-MarketPlugins.sh",
+  "Wait-HomelabReady.ps1",
+  "Wait-HomelabReady.sh",
   "Run-HomelabSite.ps1",
   "Run-HomelabSite.sh",
   "Pull.ps1",
@@ -466,4 +468,13 @@ $plugins = Join-Path $siteRoot "Start-MarketPlugins.ps1"
 if (Test-Path -LiteralPath $plugins) {
   Write-Host "Starting market plugins on homelab-backend / homelab-frontend..."
   & $plugins -Ports $Ports
+}
+
+$waitReady = Join-Path $siteRoot "Wait-HomelabReady.ps1"
+if (Test-Path -LiteralPath $waitReady) {
+  Write-Host "Waiting until PKM API and web UI are ready..."
+  & $waitReady -Ports $Ports
+  if ($LASTEXITCODE -ne 0) {
+    throw "Hub/PKM not ready (PKM API or nginx 502). See docker logs pkm-backend."
+  }
 }

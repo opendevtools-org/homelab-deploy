@@ -379,4 +379,9 @@ elif [[ -f "$SCRIPT_ROOT/Start-MarketPlugins.sh" ]]; then
   chmod +x "$SCRIPT_ROOT/Start-MarketPlugins.sh" 2>/dev/null || true
   /bin/bash "$SCRIPT_ROOT/Start-MarketPlugins.sh" || notify "WARN" "Market plugin start after backup did not fully succeed."
 fi
+if [[ -f "$SCRIPT_ROOT/Wait-HomelabReady.sh" ]]; then
+  echo "Waiting until PKM API and web UI are ready..."
+  chmod +x "$SCRIPT_ROOT/Wait-HomelabReady.sh" 2>/dev/null || true
+  /bin/bash "$SCRIPT_ROOT/Wait-HomelabReady.sh"
+fi
 set_sqlite_skip_worktree 1

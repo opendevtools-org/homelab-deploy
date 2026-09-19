@@ -173,24 +173,23 @@ if ($wantBackend) {
   }
 }
 
-if ($wantFrontend) {
-  $frontendArgs = @("compose", "--project-directory", $siteRoot)
-  $upstreamFe = Join-Path $siteRoot "upstream\docker-compose.frontend.yml"
-  if (Test-Path $upstreamFe) {
-    $frontendArgs += @(
-      "-f", "upstream/docker-compose.frontend.yml",
-      "-f", ("upstream/{0}" -f $frontendPortsFile)
-    )
-  } else {
-    $frontendArgs += @("-f", "docker-compose.frontend.yml", "-f", $frontendPortsFile)
-  }
-  if (Test-Path $feAppsOverlay) {
-    $frontendArgs += @("-f", "docker-compose.frontend.apps.yml")
-  }
-  $code = Invoke-LoggedDocker ($frontendArgs + @("up", "-d"))
-  if ($code -ne 0) {
-    Write-PluginLog "Could not start homelab-frontend with market plugins."
-  }
+# Always refresh Hub/PKM nginx, even when plugins have no frontend compose.
+$frontendArgs = @("compose", "--project-directory", $siteRoot)
+$upstreamFe = Join-Path $siteRoot "upstream\docker-compose.frontend.yml"
+if (Test-Path $upstreamFe) {
+  $frontendArgs += @(
+    "-f", "upstream/docker-compose.frontend.yml",
+    "-f", ("upstream/{0}" -f $frontendPortsFile)
+  )
+} else {
+  $frontendArgs += @("-f", "docker-compose.frontend.yml", "-f", $frontendPortsFile)
+}
+if (Test-Path $feAppsOverlay) {
+  $frontendArgs += @("-f", "docker-compose.frontend.apps.yml")
+}
+$code = Invoke-LoggedDocker ($frontendArgs + @("up", "-d"))
+if ($code -ne 0) {
+  Write-PluginLog "Could not start homelab-frontend with market plugins."
 }
 
 Write-PluginLog "Start-MarketPlugins finished."

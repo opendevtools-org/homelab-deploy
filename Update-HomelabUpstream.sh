@@ -115,6 +115,8 @@ LAUNCHERS=(
   Pull.ps1
   Start-MarketPlugins.sh
   Start-MarketPlugins.ps1
+  Wait-HomelabReady.sh
+  Wait-HomelabReady.ps1
   Run-HomelabSite.sh
   Run-HomelabSite.ps1
   Pull.sh
@@ -335,6 +337,13 @@ if [[ -f "$plugins" ]]; then
   echo "Starting market plugins on homelab-backend / homelab-frontend..."
   chmod +x "$plugins" 2>/dev/null || true
   HOMELAB_PORTS="$PORTS" /bin/bash "$plugins" || echo "Start-MarketPlugins did not fully succeed." >&2
+fi
+
+wait_ready="$SITE_ROOT/Wait-HomelabReady.sh"
+if [[ -f "$wait_ready" ]]; then
+  echo "Waiting until PKM API and web UI are ready..."
+  chmod +x "$wait_ready" 2>/dev/null || true
+  HOMELAB_PORTS="$PORTS" /bin/bash "$wait_ready"
 fi
 
 echo "Done."
