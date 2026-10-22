@@ -19,6 +19,12 @@ services:
     restart: unless-stopped
     environment:
       PLATFORM_DATA_DIR: /data
+      HUB_EDITION: docker
+      PORT: "8090"
+      DATABASE_PATH: /data/hub.sqlite
+      PLUGINS_DATA_DIR: /data/plugins
+      HUB_CONTAINER_NAME: home-hub-platform
+      HUB_PLUGIN_NETWORK: homelab_default
       PLATFORM_SERVICE_TOKEN: ${PLATFORM_SERVICE_TOKEN:?set PLATFORM_SERVICE_TOKEN in .env}
       PLATFORM_UPSTREAM_HOST: host.docker.internal
       HUB_BUILTIN_PLUGINS: ${HUB_BUILTIN_PLUGINS:-pkm}
