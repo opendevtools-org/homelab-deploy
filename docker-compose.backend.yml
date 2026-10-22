@@ -53,9 +53,16 @@ services:
       - ./data/hub:/data
       - ${HUB_MARKET_PLUGINS_HOST:-./.market-plugins-local}:/market-plugins:ro
       - ./overrides/hub-platform:/overrides:ro
+      - framework-lib:/shared/framework-lib-script
       - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "test", "-f", "/shared/framework-lib-script/homelab/__init__.py"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+      start_period: 10s
 
   pkm-backend:
     image: ghcr.io/opendevtools-org/pkm-backend:${PKM_VERSION:-latest}
@@ -63,12 +70,16 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     container_name: pkm-backend
     restart: unless-stopped
+    depends_on:
+      hub-platform:
+        condition: service_healthy
     volumes:
       - ./data/pkm:/app/data
       - ./overrides/pkm-backend:/overrides:ro
+      - framework-lib:/app/framework-lib-script:ro
     environment:
       DATA_DIR: /app/data
-      PYTHONPATH: /overrides
+      PYTHONPATH: /app/framework-lib-script:/overrides
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD in .env}
@@ -77,3 +88,6 @@ services:
       SCRIPT_FS_ROOTS: ${SCRIPT_FS_ROOTS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+volumes:
+  framework-lib:
