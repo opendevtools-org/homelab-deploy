@@ -13,7 +13,7 @@ networks:
 
 services:
   hub-platform:
-    image: ghcr.io/opendevtools-org/homelab-platform:${HOMELAB_VERSION:-latest}
+    image: ghcr.io/opendevtools-org/homelab-platform-dev:${HOMELAB_VERSION:-latest}
     pull_policy: always
     container_name: home-hub-platform
     restart: unless-stopped

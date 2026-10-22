@@ -428,7 +428,7 @@ cp .env.example .env
 
 ## Images
 
-`homelab-hub`, `homelab-platform`, `pkm-backend`, `pkm-frontend` under `ghcr.io/opendevtools-org`.
+`homelab-hub-dev`, `homelab-platform-dev`, `pkm-backend`, `pkm-frontend` under `ghcr.io/opendevtools-org`. The dev images are the ones this compose pulls. `homelab-hub` and `homelab-platform` stay unchanged.
 
 While in test/dev, publish overwrites only `:latest` (`HOMELAB_VERSION` / `PKM_VERSION` default `latest`). For a real release later, publish with an explicit semver (e.g. `1.0.0`) and pin that in `.env`.
 
