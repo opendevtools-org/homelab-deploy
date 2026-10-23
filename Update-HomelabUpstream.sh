@@ -315,27 +315,23 @@ if [[ "$START" -eq 1 ]]; then
   fi
   log "Starting Compose..."
   export BUILDKIT_PROGRESS=quiet
-  guac_profile=()
-  if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml && -f docker-compose.apps.yml ]] && grep -v '^[[:space:]]*#' docker-compose.apps.yml | grep -q 'data/hub/plugins/guacamole/docker-compose.backend.yml'; then
-    guac_profile+=(--profile guacamole)
-  fi
   be_extra=()
   [[ -f docker-compose.ports.yml ]] && be_extra+=(-f docker-compose.ports.yml)
-  docker compose --project-directory . "${guac_profile[@]}" \
+  docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     "${be_extra[@]}" \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
     -f docker-compose.config.yml pull || log "Compose pull reported errors (local build images are skipped); continuing."
-  docker compose --project-directory . "${guac_profile[@]}" \
+  docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     "${be_extra[@]}" \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
     -f docker-compose.config.yml up -d
-  docker compose --project-directory . "${guac_profile[@]}" \
+  docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
     "${be_extra[@]}" \

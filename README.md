@@ -34,7 +34,7 @@ docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker
 docker compose -f docker-compose.backend.yml -f docker-compose.lan.yml -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml up -d
 ```
 
-`docker-compose.config.yml` is last so Guacamole uses a named volume (not a Windows bind of `/config`). With the Guacamole Market plugin installed, add `--profile guacamole` (the Update/Run scripts do this).
+`docker-compose.config.yml` is last. It only fixes data ownership. A Market plugin starts when its compose file is included from `docker-compose.apps.yml`.
 
 Localhost: swap `lan` for `local`. Do not combine both. `docker-compose.yml` is an alias of `docker-compose.backend.yml`.
 

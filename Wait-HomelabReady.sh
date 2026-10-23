@@ -35,21 +35,21 @@ start_named() {
 backend_up() {
   local why="$1"
   log "$why"
-  local guac_profile=()
-  if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
-    guac_profile+=(--profile guacamole)
-  fi
+  local be_extra=()
+  [[ -f docker-compose.ports.yml ]] && be_extra+=(-f docker-compose.ports.yml)
   if [[ -f upstream/docker-compose.backend.yml ]]; then
-    docker compose --project-directory . "${guac_profile[@]}" \
+    docker compose --project-directory . \
       -f upstream/docker-compose.backend.yml \
       -f "upstream/$PORTS_FILE" \
+      "${be_extra[@]}" \
       -f docker-compose.custom.yml \
       -f docker-compose.apps.yml \
       -f docker-compose.config.yml up -d || true
   else
-    docker compose "${guac_profile[@]}" \
+    docker compose \
       -f docker-compose.backend.yml \
       -f "$PORTS_FILE" \
+      "${be_extra[@]}" \
       -f docker-compose.custom.yml \
       -f docker-compose.apps.yml \
       -f docker-compose.config.yml up -d || true
@@ -58,13 +58,12 @@ backend_up() {
 
 if ! exists pkm-backend; then
   backend_up "pkm-backend missing; running Compose backend up..."
-elif [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]] && ! exists homelab-guacamole; then
-  backend_up "homelab-guacamole missing; running Compose backend up..."
 fi
 
 if ! exists pkm-frontend; then
   log "pkm-frontend missing; running Compose frontend up..."
   extra_fe=()
+  [[ -f docker-compose.frontend.ports.yml ]] && extra_fe+=(-f docker-compose.frontend.ports.yml)
   [[ -f docker-compose.frontend.apps.yml ]] && extra_fe+=(-f docker-compose.frontend.apps.yml)
   if [[ -f upstream/docker-compose.frontend.yml ]]; then
     docker compose --project-directory . \

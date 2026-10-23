@@ -1,11 +1,8 @@
-# One-time initialization overlay (data + named-volume ownership) and
-# Guacamole named volume + Hub SSO env.
+# One-time initialization overlay (data + named-volume ownership).
 #
-# Last -f on the backend project so it wins over Market plugin bind mounts
-# (Windows bind of /config leaves flcontainers/guacamole on "waiting for DB").
-# Guacamole uses Compose profile `guacamole`: launchers pass
-# `--profile guacamole` only when the Market plugin is installed. Without
-# that flag this file does not start a Guacamole container.
+# Last -f on the backend project. Market plugins, including Guacamole, join
+# only through docker-compose.apps.yml. This file does not declare them:
+# a service here without an image makes the whole project invalid.
 #
 # After `up`, launchers run `docker compose rm --force` (no --stop, no
 # service names) so only already-exited one-shots are removed. --stop
@@ -103,24 +100,6 @@ services:
       site-cli-volumes-permissions:
         condition: service_completed_successfully
 
-  guacamole:
-    profiles: [guacamole]
-    # Hub reaches Guacamole on the Docker network. Publishing host :8080
-    # fails when that port is already taken (typical on Linux).
-    ports: !reset []
-    pull_policy: missing
-    environment:
-      EXTENSIONS: auth-header
-      HTTP_AUTH_HEADER: REMOTE_USER
-      POSTGRESQL_AUTO_CREATE_ACCOUNTS: "true"
-    volumes:
-      - guacamole-config:/config
-    extra_hosts:
-      - "localhost:127.0.0.1"
-
 volumes:
   site-cli-cache:
   site-cli-home:
-  guacamole-config:
-    name: homelab-guacamole-config
-    driver: local

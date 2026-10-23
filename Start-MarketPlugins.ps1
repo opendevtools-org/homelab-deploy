@@ -159,15 +159,11 @@ function Test-NamedRunning([string]$Name) {
 
 $needBackendUp = $false
 if ($wantBackend -and -not $skipCompose) {
-  $needBackendUp = $backendDirty -or -not (Test-NamedRunning "homelab-guacamole")
+  $needBackendUp = $backendDirty
 }
 
 if ($needBackendUp) {
   $backendArgs = @("compose", "--project-directory", $siteRoot)
-  $plugin = Join-Path $siteRoot "data\hub\plugins\guacamole\docker-compose.backend.yml"
-  if (Test-Path -LiteralPath $plugin) {
-    $backendArgs += @("--profile", "guacamole")
-  }
   $upstreamBe = Join-Path $siteRoot "upstream\docker-compose.backend.yml"
   if (Test-Path $upstreamBe) {
     $backendArgs += @(

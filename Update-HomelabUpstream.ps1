@@ -449,19 +449,6 @@ if ($Push) {
   Write-Ts "Pushed."
 }
 
-function Test-GuacamoleIncluded([string]$Root) {
-  $plugin = Join-Path $Root "data\hub\plugins\guacamole\docker-compose.backend.yml"
-  $overlay = Join-Path $Root "docker-compose.apps.yml"
-  if (-not (Test-Path -LiteralPath $plugin)) { return $false }
-  if (-not (Test-Path -LiteralPath $overlay)) { return $false }
-  foreach ($line in [System.IO.File]::ReadAllLines($overlay)) {
-    $trim = $line.Trim()
-    if ($trim.StartsWith("#")) { continue }
-    if ($trim -like "*data/hub/plugins/guacamole/docker-compose.backend.yml*") { return $true }
-  }
-  return $false
-}
-
 if ($Start) {
   if (-not (Test-Path (Join-Path $siteRoot ".env"))) {
     throw "Missing .env in site root."
@@ -485,9 +472,6 @@ if ($Start) {
     $backendComposeArgs = @(
       "compose", "--project-directory", "."
     )
-    if (Test-GuacamoleIncluded $siteRoot) {
-      $backendComposeArgs += @("--profile", "guacamole")
-    }
     $backendComposeArgs += @(
       "-f", "upstream/docker-compose.backend.yml",
       "-f", ("upstream/{0}" -f $portsFile)

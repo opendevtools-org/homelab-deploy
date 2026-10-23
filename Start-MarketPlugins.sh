@@ -137,7 +137,7 @@ named_running() {
 
 need_be=0
 if [[ "$want_be" -eq 1 && "$skip_compose" -eq 0 ]]; then
-  if [[ "$be_dirty" -eq 1 ]] || ! named_running homelab-guacamole; then
+  if [[ "$be_dirty" -eq 1 ]]; then
     need_be=1
   fi
 fi
@@ -145,9 +145,6 @@ fi
 if [[ "$need_be" -eq 1 ]]; then
   if [[ -f upstream/docker-compose.backend.yml ]]; then
     be=(docker compose --project-directory .)
-    if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
-      be+=(--profile guacamole)
-    fi
     be+=(
       -f upstream/docker-compose.backend.yml
       -f "upstream/$PORTS_FILE"
@@ -156,9 +153,6 @@ if [[ "$need_be" -eq 1 ]]; then
       -f docker-compose.config.yml)
   else
     be=(docker compose)
-    if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
-      be+=(--profile guacamole)
-    fi
     be+=(
       -f docker-compose.backend.yml
       -f "$PORTS_FILE"

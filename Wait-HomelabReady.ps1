@@ -81,15 +81,16 @@ function Invoke-BackendComposeUp {
   param([string]$Reason)
   Write-Ts $Reason
   $backendArgs = @("compose", "--project-directory", $siteRoot)
-  $plugin = Join-Path $siteRoot "data\hub\plugins\guacamole\docker-compose.backend.yml"
-  if (Test-Path -LiteralPath $plugin) {
-    $backendArgs += @("--profile", "guacamole")
-  }
   $upstreamBe = Join-Path $siteRoot "upstream\docker-compose.backend.yml"
   if (Test-Path $upstreamBe) {
     $backendArgs += @(
       "-f", "upstream/docker-compose.backend.yml",
-      "-f", ("upstream/{0}" -f $portsFile),
+      "-f", ("upstream/{0}" -f $portsFile)
+    )
+    if (Test-Path -LiteralPath (Join-Path $siteRoot "docker-compose.ports.yml")) {
+      $backendArgs += @("-f", "docker-compose.ports.yml")
+    }
+    $backendArgs += @(
       "-f", "docker-compose.custom.yml",
       "-f", "docker-compose.apps.yml",
       "-f", "docker-compose.config.yml"
@@ -97,7 +98,12 @@ function Invoke-BackendComposeUp {
   } else {
     $backendArgs += @(
       "-f", "docker-compose.backend.yml",
-      "-f", $portsFile,
+      "-f", $portsFile
+    )
+    if (Test-Path -LiteralPath (Join-Path $siteRoot "docker-compose.ports.yml")) {
+      $backendArgs += @("-f", "docker-compose.ports.yml")
+    }
+    $backendArgs += @(
       "-f", "docker-compose.custom.yml",
       "-f", "docker-compose.apps.yml",
       "-f", "docker-compose.config.yml"
@@ -109,11 +115,8 @@ function Invoke-BackendComposeUp {
   $ErrorActionPreference = $prev
 }
 
-$guacCompose = Join-Path $siteRoot "data\hub\plugins\guacamole\docker-compose.backend.yml"
 if (-not (Test-ContainerExists "pkm-backend")) {
   Invoke-BackendComposeUp "pkm-backend missing; running Compose backend up..."
-} elseif ((Test-Path -LiteralPath $guacCompose) -and -not (Test-ContainerExists "homelab-guacamole")) {
-  Invoke-BackendComposeUp "homelab-guacamole missing; running Compose backend up..."
 }
 
 if (-not (Test-ContainerExists "pkm-frontend")) {
@@ -127,6 +130,9 @@ if (-not (Test-ContainerExists "pkm-frontend")) {
     )
   } else {
     $frontendArgs += @("-f", "docker-compose.frontend.yml", "-f", $frontendPortsFile)
+  }
+  if (Test-Path (Join-Path $siteRoot "docker-compose.frontend.ports.yml")) {
+    $frontendArgs += @("-f", "docker-compose.frontend.ports.yml")
   }
   if (Test-Path (Join-Path $siteRoot "docker-compose.frontend.apps.yml")) {
     $frontendArgs += @("-f", "docker-compose.frontend.apps.yml")
@@ -156,9 +162,10 @@ urllib.request.urlopen("http://127.0.0.1:8000/api/health", timeout=5).read()
 function Test-PkmApi {
   $prev = $ErrorActionPreference
   $ErrorActionPreference = "Continue"
-  & docker exec pkm-backend python -c $probe 2>$null | Out-Null
-  if ($LASTEXITCODE -eq 0) { $ErrorActionPreference = $prev; return $true }
-  & docker exec pkm-backend python3 -c $probe 2>$null | Out-Null
+  $probe | & docker exec -i pkm-backend python - 2>$null | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    $probe | & docker exec -i pkm-backend python3 - 2>$null | Out-Null
+  }
   $ok = ($LASTEXITCODE -eq 0)
   $ErrorActionPreference = $prev
   return $ok
