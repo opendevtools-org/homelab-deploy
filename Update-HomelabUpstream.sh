@@ -319,21 +319,26 @@ if [[ "$START" -eq 1 ]]; then
   if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
     guac_profile+=(--profile guacamole)
   fi
+  be_extra=()
+  [[ -f docker-compose.ports.yml ]] && be_extra+=(-f docker-compose.ports.yml)
   docker compose --project-directory . "${guac_profile[@]}" \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    "${be_extra[@]}" \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
     -f docker-compose.config.yml pull || log "Compose pull reported errors (local build images are skipped); continuing."
   docker compose --project-directory . "${guac_profile[@]}" \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    "${be_extra[@]}" \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
     -f docker-compose.config.yml up -d
   docker compose --project-directory . "${guac_profile[@]}" \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    "${be_extra[@]}" \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
     -f docker-compose.config.yml \
@@ -346,6 +351,7 @@ if [[ "$START" -eq 1 ]]; then
   if https_overlay_enabled; then
     log "LAN HTTPS overlay (Caddy) enabled."
     extra_fe=()
+    [[ -f docker-compose.frontend.ports.yml ]] && extra_fe+=(-f docker-compose.frontend.ports.yml)
     [[ -f docker-compose.frontend.apps.yml ]] && extra_fe+=(-f docker-compose.frontend.apps.yml)
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
@@ -359,6 +365,7 @@ if [[ "$START" -eq 1 ]]; then
       -f docker-compose.https.yml up -d
   else
     extra_fe=()
+    [[ -f docker-compose.frontend.ports.yml ]] && extra_fe+=(-f docker-compose.frontend.ports.yml)
     [[ -f docker-compose.frontend.apps.yml ]] && extra_fe+=(-f docker-compose.frontend.apps.yml)
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \

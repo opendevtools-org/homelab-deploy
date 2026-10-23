@@ -343,12 +343,14 @@ cat >"$TARGET_DIR/README.md" <<EOF
 docker compose --project-directory . \\
   -f upstream/docker-compose.backend.yml \\
   -f upstream/$PORTS_FILE \\
+  -f docker-compose.ports.yml \\
   -f docker-compose.custom.yml \\
   -f docker-compose.apps.yml \\
   -f docker-compose.config.yml up -d
 docker compose --project-directory . \\
   -f upstream/docker-compose.frontend.yml \\
-  -f upstream/$FRONTEND_PORTS_FILE up -d
+  -f upstream/$FRONTEND_PORTS_FILE \\
+  -f docker-compose.frontend.ports.yml up -d
 # LAN HTTPS: add -f docker-compose.https.yml when HUB_HOSTNAME and PKM_HOSTNAME are set
 \`\`\`
 
@@ -456,6 +458,130 @@ if [[ "$SKIP_GIT" -eq 0 && "$SKIP_COMMIT" -eq 0 && -d "$TARGET_DIR/.git" ]]; the
   fi
 fi
 
+tcp_port_busy() {
+  local port="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$port" <<'PY'
+import socket, sys
+port = int(sys.argv[1])
+for host in ("0.0.0.0", "127.0.0.1"):
+    sock = socket.socket()
+    try:
+        sock.bind((host, port))
+    except OSError:
+        sys.exit(0)
+    finally:
+        sock.close()
+sys.exit(1)
+PY
+    return $?
+  fi
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq "(^|:|\\])${port}$"
+    return $?
+  fi
+  if command -v netstat >/dev/null 2>&1; then
+    netstat -an 2>/dev/null | grep -Eq "[:.]${port}([^0-9]|$)"
+    return $?
+  fi
+  return 1
+}
+
+free_tcp_port() {
+  local preferred="$1" taken="$2" p
+  for ((p = preferred; p < preferred + 400; p++)); do
+    case ",${taken}," in
+      *,"$p",*) continue ;;
+    esac
+    if tcp_port_busy "$p"; then
+      continue
+    fi
+    printf '%s' "$p"
+    return 0
+  done
+  echo "No free TCP port from $preferred" >&2
+  return 1
+}
+
+publish_port() {
+  local mode="$1" host_port="$2" container_port="$3"
+  if [[ "$mode" == "local" ]]; then
+    printf '127.0.0.1:%s:%s' "$host_port" "$container_port"
+  else
+    printf '%s:%s' "$host_port" "$container_port"
+  fi
+}
+
+write_site_port_files() {
+  local root="$1" mode="$2"
+  local backend="$root/docker-compose.ports.yml"
+  local frontend="$root/docker-compose.frontend.ports.yml"
+  if [[ -f "$backend" || -f "$frontend" ]]; then
+    echo "Ports      : kept from the site compose files"
+    return 0
+  fi
+  local taken="" hub_api hub_ui pkm_api pkm_ui
+  hub_api="$(free_tcp_port 8090 "$taken")"
+  taken="${taken},${hub_api}"
+  hub_ui="$(free_tcp_port 3080 "$taken")"
+  taken="${taken},${hub_ui}"
+  pkm_api="$(free_tcp_port 8001 "$taken")"
+  taken="${taken},${pkm_api}"
+  pkm_ui="$(free_tcp_port 3030 "$taken")"
+  local hub_api_pub hub_ui_pub pkm_api_pub pkm_ui_pub origin
+  hub_api_pub="$(publish_port "$mode" "$hub_api" 8090)"
+  hub_ui_pub="$(publish_port "$mode" "$hub_ui" 80)"
+  pkm_api_pub="$(publish_port "$mode" "$pkm_api" 8000)"
+  pkm_ui_pub="$(publish_port "$mode" "$pkm_ui" 80)"
+  if [[ "$mode" == "local" ]]; then
+    origin="http://127.0.0.1:${hub_ui}"
+  else
+    origin="\${HUB_PUBLIC_URL:-http://127.0.0.1:${hub_ui}}"
+  fi
+  cat >"$backend" <<EOF
+# Site ports. Chosen once from free host ports. Update keeps this file.
+services:
+  hub-platform:
+    ports: !override
+      - "${hub_api_pub}"
+    environment:
+      PUBLIC_PKM_URL: "http://127.0.0.1:${pkm_ui}/"
+      BUILTIN_PKM_PORT: "${pkm_ui}"
+  pkm-backend:
+    ports: !override
+      - "${pkm_api_pub}"
+EOF
+  cat >"$frontend" <<EOF
+# Site web ports. Chosen once from free host ports. Update keeps this file.
+services:
+  hub:
+    ports: !override
+      - "${hub_ui_pub}"
+    environment:
+      HUB_BROWSER_ORIGIN: "${origin}"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -n "\$\$HUB_BROWSER_ORIGIN" ]; then
+          sed -i "s#http://127.0.0.1:8092#\$\$HUB_BROWSER_ORIGIN#g" /usr/share/nginx/html/main.dart.js
+        fi
+        exec /docker-entrypoint.sh nginx -g "daemon off;"
+  pkm-frontend:
+    ports: !override
+      - "${pkm_ui_pub}"
+EOF
+  echo "Ports      : hub ${hub_ui}  api ${hub_api}  pkm ${pkm_ui}  pkm-api ${pkm_api}"
+}
+
+write_site_port_files "$TARGET_DIR" "$PORTS"
+if [[ "$SKIP_GIT" -eq 0 && "$SKIP_COMMIT" -eq 0 && -d "$TARGET_DIR/.git" ]]; then
+  cd "$TARGET_DIR"
+  git add -- docker-compose.ports.yml docker-compose.frontend.ports.yml
+  if [[ -n "$(git status --porcelain -- docker-compose.ports.yml docker-compose.frontend.ports.yml)" ]]; then
+    git commit -m "Record the host ports chosen for this site."
+  fi
+fi
+
 if [[ "$PUSH" -eq 1 ]]; then
   [[ "$SKIP_GIT" -eq 1 || -z "$SITE_REPO" ]] && { echo "--push requires --site-repo" >&2; exit 1; }
   cd "$TARGET_DIR"
@@ -470,24 +596,31 @@ if [[ "$START" -eq 1 ]]; then
   cd "$TARGET_DIR"
   [[ -f .env ]] || { echo "Missing .env" >&2; exit 1; }
   echo "Starting Compose (backend then frontend)..."
+  be_extra=()
+  [[ -f docker-compose.ports.yml ]] && be_extra+=(-f docker-compose.ports.yml)
+  fe_extra=()
+  [[ -f docker-compose.frontend.ports.yml ]] && fe_extra+=(-f docker-compose.frontend.ports.yml)
   for n in pkm-backend pkm-frontend home-hub home-hub-platform pkm-https; do
     docker rm -f "$n" >/dev/null 2>&1 || true
   done
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    "${be_extra[@]}" \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
     -f docker-compose.config.yml pull
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    "${be_extra[@]}" \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
     -f docker-compose.config.yml up -d
   docker compose --project-directory . \
     -f upstream/docker-compose.backend.yml \
     -f "upstream/$PORTS_FILE" \
+    "${be_extra[@]}" \
     -f docker-compose.custom.yml \
     -f docker-compose.apps.yml \
     -f docker-compose.config.yml \
@@ -502,23 +635,27 @@ if [[ "$START" -eq 1 ]]; then
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
       -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${fe_extra[@]}" \
       -f docker-compose.https.yml pull
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
       -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${fe_extra[@]}" \
       -f docker-compose.https.yml up -d
   else
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
-      -f "upstream/$FRONTEND_PORTS_FILE" pull
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${fe_extra[@]}" pull
     docker compose --project-directory . \
       -f upstream/docker-compose.frontend.yml \
-      -f "upstream/$FRONTEND_PORTS_FILE" up -d
+      -f "upstream/$FRONTEND_PORTS_FILE" \
+      "${fe_extra[@]}" up -d
   fi
 fi
 
 echo
 echo "Done. Flat install converted in place:"
 echo "  $TARGET_DIR"
-echo "  Backend:  docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/$PORTS_FILE -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml up -d"
-echo "  Frontend: docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/$FRONTEND_PORTS_FILE up -d"
+echo "  Backend:  docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/$PORTS_FILE -f docker-compose.ports.yml -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml up -d"
+echo "  Frontend: docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/$FRONTEND_PORTS_FILE -f docker-compose.frontend.ports.yml up -d"

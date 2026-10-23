@@ -477,7 +477,12 @@ if ($Start) {
     }
     $backendComposeArgs += @(
       "-f", "upstream/docker-compose.backend.yml",
-      "-f", ("upstream/{0}" -f $portsFile),
+      "-f", ("upstream/{0}" -f $portsFile)
+    )
+    if (Test-Path -LiteralPath (Join-Path $siteRoot "docker-compose.ports.yml")) {
+      $backendComposeArgs += @("-f", "docker-compose.ports.yml")
+    }
+    $backendComposeArgs += @(
       "-f", "docker-compose.custom.yml",
       "-f", "docker-compose.apps.yml",
       "-f", "docker-compose.config.yml"
@@ -494,6 +499,9 @@ if ($Start) {
       "-f", "upstream/docker-compose.frontend.yml",
       "-f", ("upstream/{0}" -f $frontendPortsFile)
     )
+    if (Test-Path -LiteralPath (Join-Path $siteRoot "docker-compose.frontend.ports.yml")) {
+      $frontendComposeArgs += @("-f", "docker-compose.frontend.ports.yml")
+    }
     if (Test-Path (Join-Path $siteRoot "docker-compose.frontend.apps.yml")) {
       $frontendComposeArgs += @("-f", "docker-compose.frontend.apps.yml")
     }

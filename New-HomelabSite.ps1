@@ -183,6 +183,98 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
   [System.IO.File]::WriteAllText($Path, $text, [System.Text.UTF8Encoding]::new($false))
 }
 
+function Test-TcpPortBusy([int]$Port) {
+  foreach ($ip in @([Net.IPAddress]::Any, [Net.IPAddress]::Loopback)) {
+    $listener = $null
+    try {
+      $listener = New-Object System.Net.Sockets.TcpListener ($ip, $Port)
+      $listener.Start()
+    } catch {
+      return $true
+    } finally {
+      if ($null -ne $listener) {
+        try { $listener.Stop() } catch {}
+      }
+    }
+  }
+  return $false
+}
+
+function Get-FreeTcpPort([int]$Preferred, [System.Collections.Generic.HashSet[int]]$Taken) {
+  for ($p = $Preferred; $p -lt ($Preferred + 400); $p++) {
+    if ($Taken.Contains($p)) { continue }
+    if (Test-TcpPortBusy $p) { continue }
+    [void]$Taken.Add($p)
+    return $p
+  }
+  throw "No free TCP port from $Preferred"
+}
+
+function Write-SitePortFiles([string]$Root, [string]$Mode) {
+  $backend = Join-Path $Root "docker-compose.ports.yml"
+  $frontend = Join-Path $Root "docker-compose.frontend.ports.yml"
+  if ((Test-Path -LiteralPath $backend) -or (Test-Path -LiteralPath $frontend)) {
+    Write-Host "Ports      : kept from the site compose files"
+    return
+  }
+  $taken = New-Object 'System.Collections.Generic.HashSet[int]'
+  $hubApi = Get-FreeTcpPort 8090 $taken
+  $hubUi = Get-FreeTcpPort 3080 $taken
+  $pkmApi = Get-FreeTcpPort 8001 $taken
+  $pkmUi = Get-FreeTcpPort 3030 $taken
+  $publish = {
+    param([int]$HostPort, [int]$ContainerPort)
+    if ($Mode -eq "local") { return "127.0.0.1:${HostPort}:${ContainerPort}" }
+    return "${HostPort}:${ContainerPort}"
+  }
+  $hubApiPub = & $publish $hubApi 8090
+  $hubUiPub = & $publish $hubUi 80
+  $pkmApiPub = & $publish $pkmApi 8000
+  $pkmUiPub = & $publish $pkmUi 80
+  $origin = if ($Mode -eq "local") {
+    "http://127.0.0.1:$hubUi"
+  } else {
+    '${HUB_PUBLIC_URL:-http://127.0.0.1:' + $hubUi + '}'
+  }
+  $be = @(
+    "# Site ports. Chosen once from free host ports. Update keeps this file.",
+    "services:",
+    "  hub-platform:",
+    "    ports: !override",
+    "      - `"$hubApiPub`"",
+    "    environment:",
+    "      PUBLIC_PKM_URL: `"http://127.0.0.1:$pkmUi/`"",
+    "      BUILTIN_PKM_PORT: `"$pkmUi`"",
+    "  pkm-backend:",
+    "    ports: !override",
+    "      - `"$pkmApiPub`""
+  ) -join "`n"
+  $feHead = @(
+    "# Site web ports. Chosen once from free host ports. Update keeps this file.",
+    "services:",
+    "  hub:",
+    "    ports: !override",
+    "      - `"$hubUiPub`"",
+    "    environment:",
+    "      HUB_BROWSER_ORIGIN: `"$origin`""
+  ) -join "`n"
+  $feCmd = @'
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -n "$$HUB_BROWSER_ORIGIN" ]; then
+          sed -i "s#http://127.0.0.1:8092#$$HUB_BROWSER_ORIGIN#g" /usr/share/nginx/html/main.dart.js
+        fi
+        exec /docker-entrypoint.sh nginx -g "daemon off;"
+  pkm-frontend:
+    ports: !override
+'@
+  $fe = $feHead + "`n" + $feCmd + "`n      - `"$pkmUiPub`"`n"
+  Write-Utf8NoBom $backend $be
+  Write-Utf8NoBom $frontend $fe
+  Write-Host ("Ports      : hub {0}  api {1}  pkm {2}  pkm-api {3}" -f $hubUi, $hubApi, $pkmUi, $pkmApi)
+}
+
 function Get-GitIgnoreExtras([string]$ExistingText, [string]$ProductText) {
   $productLines = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
   foreach ($line in ($ProductText -split "`r?`n")) {
@@ -576,12 +668,14 @@ Converted from a flat ``homelab-deploy`` install.
 docker compose --project-directory . \\
   -f upstream/docker-compose.backend.yml \\
   -f upstream/$portsFile \\
+  -f docker-compose.ports.yml \\
   -f docker-compose.custom.yml \\
   -f docker-compose.apps.yml \\
   -f docker-compose.config.yml up -d
 docker compose --project-directory . \\
   -f upstream/docker-compose.frontend.yml \\
-  -f upstream/$frontendPortsFile up -d
+  -f upstream/$frontendPortsFile \\
+  -f docker-compose.frontend.ports.yml up -d
 # LAN HTTPS: add -f docker-compose.https.yml when HUB_HOSTNAME and PKM_HOSTNAME are set
 ``````
 
@@ -727,6 +821,19 @@ if (-not $SkipGit -and -not $SkipCommit -and (Test-Path (Join-Path $TargetDir ".
   }
 }
 
+Write-SitePortFiles $TargetDir $Ports
+if (-not $SkipGit -and -not $SkipCommit -and (Test-Path (Join-Path $TargetDir ".git"))) {
+  Set-Location $TargetDir
+  Invoke-Git add -- docker-compose.ports.yml docker-compose.frontend.ports.yml | Out-Null
+  $prev = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  $portStatus = @(& git status --porcelain -- docker-compose.ports.yml docker-compose.frontend.ports.yml 2>&1)
+  $ErrorActionPreference = $prev
+  if ($portStatus) {
+    Invoke-Git commit -m "Record the host ports chosen for this site." | Out-Null
+  }
+}
+
 if ($Push) {
   if ($SkipGit -or -not $SiteRepo) { throw "-Push requires -SiteRepo (and not -SkipGit)." }
   Set-Location $TargetDir
@@ -758,7 +865,12 @@ if ($Start) {
     $backendComposeArgs = @(
       "compose", "--project-directory", ".",
       "-f", "upstream/docker-compose.backend.yml",
-      "-f", ("upstream/{0}" -f $portsFile),
+      "-f", ("upstream/{0}" -f $portsFile)
+    )
+    if (Test-Path -LiteralPath (Join-Path $TargetDir "docker-compose.ports.yml")) {
+      $backendComposeArgs += @("-f", "docker-compose.ports.yml")
+    }
+    $backendComposeArgs += @(
       "-f", "docker-compose.custom.yml",
       "-f", "docker-compose.apps.yml",
       "-f", "docker-compose.config.yml"
@@ -775,6 +887,9 @@ if ($Start) {
       "-f", "upstream/docker-compose.frontend.yml",
       "-f", ("upstream/{0}" -f $frontendPortsFile)
     )
+    if (Test-Path -LiteralPath (Join-Path $TargetDir "docker-compose.frontend.ports.yml")) {
+      $frontendComposeArgs += @("-f", "docker-compose.frontend.ports.yml")
+    }
     if (Test-HttpsOverlayEnabled $TargetDir) {
       Write-Host "LAN HTTPS overlay (Caddy) enabled."
       $frontendComposeArgs += @("-f", "docker-compose.https.yml")
@@ -794,5 +909,5 @@ Write-Host "Done. Flat install converted in place:"
 Write-Host ("  {0}" -f $TargetDir)
 Write-Host "  upstream/  = product submodule (git pull inside to update)"
 Write-Host "  data/      = your volumes"
-Write-Host ("  Backend   : docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/{0} -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml up -d" -f $portsFile)
-Write-Host ("  Frontend  : docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/{0} up -d" -f $frontendPortsFile)
+Write-Host ("  Backend   : docker compose --project-directory . -f upstream/docker-compose.backend.yml -f upstream/{0} -f docker-compose.ports.yml -f docker-compose.custom.yml -f docker-compose.apps.yml -f docker-compose.config.yml up -d" -f $portsFile)
+Write-Host ("  Frontend  : docker compose --project-directory . -f upstream/docker-compose.frontend.yml -f upstream/{0} -f docker-compose.frontend.ports.yml up -d" -f $frontendPortsFile)
