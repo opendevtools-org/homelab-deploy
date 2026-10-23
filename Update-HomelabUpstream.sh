@@ -316,7 +316,7 @@ if [[ "$START" -eq 1 ]]; then
   log "Starting Compose..."
   export BUILDKIT_PROGRESS=quiet
   guac_profile=()
-  if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml ]]; then
+  if [[ -f data/hub/plugins/guacamole/docker-compose.backend.yml && -f docker-compose.apps.yml ]] && grep -v '^[[:space:]]*#' docker-compose.apps.yml | grep -q 'data/hub/plugins/guacamole/docker-compose.backend.yml'; then
     guac_profile+=(--profile guacamole)
   fi
   be_extra=()
